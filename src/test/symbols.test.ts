@@ -32,6 +32,35 @@ describe('Symbol Extraction Patterns', () => {
 		});
 	});
 
+	describe('Label Definitions with init prefix', () => {
+		// This is the pattern used in the server for indexing labels
+		const labelIndexRegex = /^(\s*)(?:init\s+(?:-?\d+\s+)?)?(label)\s+(\.?[a-zA-Z_][a-zA-Z0-9_.]*)/;
+
+		it('should extract label without init', () => {
+			const match = 'label chapter_end:'.match(labelIndexRegex);
+			expect(match).not.toBeNull();
+			expect(match![3]).toBe('chapter_end');
+		});
+
+		it('should extract label with init prefix', () => {
+			const match = 'init label chapter_end:'.match(labelIndexRegex);
+			expect(match).not.toBeNull();
+			expect(match![3]).toBe('chapter_end');
+		});
+
+		it('should extract label with init priority', () => {
+			const match = 'init -1 label chapter_end:'.match(labelIndexRegex);
+			expect(match).not.toBeNull();
+			expect(match![3]).toBe('chapter_end');
+		});
+
+		it('should extract label with positive init priority', () => {
+			const match = 'init 999 label chapter_end:'.match(labelIndexRegex);
+			expect(match).not.toBeNull();
+			expect(match![3]).toBe('chapter_end');
+		});
+	});
+
 	describe('Screen Definitions', () => {
 		const screenDefRegex = /^(\s*)(screen)\s+([a-zA-Z_][a-zA-Z0-9_]*)(?:\s*\(([^)]*)\))?\s*:/;
 
@@ -46,6 +75,41 @@ describe('Symbol Extraction Patterns', () => {
 			expect(match).not.toBeNull();
 			expect(match![3]).toBe('inventory');
 			expect(match![4]).toBe('items, selected=None');
+		});
+	});
+
+	describe('Screen Definitions with init prefix', () => {
+		// This is the pattern used in the server for indexing screens
+		const screenIndexRegex = /^(\s*)(?:init\s+(?:-?\d+\s+)?)?(screen)\s+([a-zA-Z_][a-zA-Z0-9_]*)/;
+
+		it('should extract screen without init', () => {
+			const match = 'screen phone_message_screen:'.match(screenIndexRegex);
+			expect(match).not.toBeNull();
+			expect(match![3]).toBe('phone_message_screen');
+		});
+
+		it('should extract screen with init prefix', () => {
+			const match = 'init screen phone_message_screen:'.match(screenIndexRegex);
+			expect(match).not.toBeNull();
+			expect(match![3]).toBe('phone_message_screen');
+		});
+
+		it('should extract screen with init priority', () => {
+			const match = 'init -1 screen phone_message_screen:'.match(screenIndexRegex);
+			expect(match).not.toBeNull();
+			expect(match![3]).toBe('phone_message_screen');
+		});
+
+		it('should extract screen with positive init priority', () => {
+			const match = 'init 999 screen phone_message_screen:'.match(screenIndexRegex);
+			expect(match).not.toBeNull();
+			expect(match![3]).toBe('phone_message_screen');
+		});
+
+		it('should extract screen with parameters after init', () => {
+			const match = 'init screen my_screen(arg1, arg2):'.match(screenIndexRegex);
+			expect(match).not.toBeNull();
+			expect(match![3]).toBe('my_screen');
 		});
 	});
 

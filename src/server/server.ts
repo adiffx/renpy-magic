@@ -252,15 +252,16 @@ function indexFile(filePath: string) {
 		const lines = content.split('\n');
 
 		// Regex patterns for symbols
+		// Note: Many Ren'Py statements can be prefixed with "init" or "init <priority>" (e.g., "init screen", "init -1 label")
 		const patterns: Array<{ regex: RegExp; kind: SymbolDefinition['kind'] }> = [
-			{ regex: /^(\s*)(label)\s+(\.?[a-zA-Z_][a-zA-Z0-9_.]*)/,  kind: 'label' },
-			{ regex: /^(\s*)(screen)\s+([a-zA-Z_][a-zA-Z0-9_]*)/,  kind: 'screen' },
-			{ regex: /^(\s*)(transform)\s+([a-zA-Z_][a-zA-Z0-9_]*)/,  kind: 'transform' },
-			{ regex: /^(\s*)(image)\s+([a-zA-Z_][a-zA-Z0-9_ ]+)\s*=/,  kind: 'image' },
+			{ regex: /^(\s*)(?:init\s+(?:-?\d+\s+)?)?(label)\s+(\.?[a-zA-Z_][a-zA-Z0-9_.]*)/,  kind: 'label' },
+			{ regex: /^(\s*)(?:init\s+(?:-?\d+\s+)?)?(screen)\s+([a-zA-Z_][a-zA-Z0-9_]*)/,  kind: 'screen' },
+			{ regex: /^(\s*)(?:init\s+(?:-?\d+\s+)?)?(transform)\s+([a-zA-Z_][a-zA-Z0-9_]*)/,  kind: 'transform' },
+			{ regex: /^(\s*)(?:init\s+(?:-?\d+\s+)?)?(image)\s+([a-zA-Z_][a-zA-Z0-9_ ]+)\s*=/,  kind: 'image' },
 			{ regex: /^(\s*)(define)\s+([a-zA-Z_][a-zA-Z0-9_.]*)\s*=/,  kind: 'define' },
 			{ regex: /^(\s*)(default)\s+([a-zA-Z_][a-zA-Z0-9_.]*)\s*=/,  kind: 'default' },
-			{ regex: /^(\s*)(style)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*:/,  kind: 'style' },
-			{ regex: /^(\s*)(layeredimage)\s+([a-zA-Z_][a-zA-Z0-9_ ]+)\s*:/,  kind: 'layeredimage' },
+			{ regex: /^(\s*)(?:init\s+(?:-?\d+\s+)?)?(style)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*:/,  kind: 'style' },
+			{ regex: /^(\s*)(?:init\s+(?:-?\d+\s+)?)?(layeredimage)\s+([a-zA-Z_][a-zA-Z0-9_ ]+)\s*:/,  kind: 'layeredimage' },
 			// Python function definitions - capture the full signature
 			{ regex: /^(\s*)(def)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/,  kind: 'python_function' },
 			// Python class definitions
