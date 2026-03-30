@@ -2,7 +2,7 @@
   "name": "renpy-language-support",
   "displayName": "Ren'Py Magic",
   "description": "Complete language support for Ren'Py visual novel engine - syntax highlighting, completions, hover docs, go-to-definition, and diagnostics",
-  "version": "0.1.0",
+  "version": "1.0.3",
   "publisher": "adiffx",
   "author": {
     "name": "adiffx"
@@ -15,7 +15,7 @@
   "bugs": {
     "url": "https://github.com/adiffx/renpy-vscode-extension/issues"
   },
-  "homepage": "https://github.com/adiffx/renpy-vscode-extension#readme",
+  "homepage": "https://adiffx.com/renpy-magic/",
   "icon": "images/icon.png",
   "galleryBanner": {
     "color": "#2d2d2d",
@@ -61,7 +61,17 @@
         "scopeName": "source.renpy",
         "path": "./syntaxes/renpy.tmLanguage.json"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "Ren'Py Magic",
+      "properties": {
+        "renpyMagic.diagnostics.warnUndefinedImages": {
+          "type": "boolean",
+          "default": false,
+          "description": "Warn when show/scene references an image not defined in code. Disabled by default because images are often defined as files rather than in code."
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",

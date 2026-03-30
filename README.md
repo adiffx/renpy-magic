@@ -4,7 +4,7 @@
  
  A Visual Studio Code extension that adds rich language support for the Ren’Py visual novel engine.
 
-I originally made this for myself after running into a few small annoyances with existing extensions — mainly wanting to jump to symbols with `Cmd+R`, check whether an image reference actually exists, and jump to image definitions with `F12`.
+I originally made this for myself after running into a few small annoyances with existing extensions — mainly wanting to jump to labels in current file, check whether an image reference actually exists, and jump to image definitions with `F12`.
 
 I kept adding things as I needed them while working on projects, and over time it just grew into something more complete. It’s still very much shaped by what I personally find useful, but it might be helpful to others too. It's powered by a proper language server (LSP), which makes features like navigation, diagnostics, and completions more consistent and reliable.
 
@@ -182,10 +182,16 @@ This pulls documentation from Ren’Py source and RST files, generating:
 src/server/renpy-api.json
 ```
 
+## ⚙️ Settings
+
+| Setting | Default | Description |
+| ------- | ------- | ----------- |
+| `renpyMagic.diagnostics.warnUndefinedImages` | `false` | Warn when `show`/`scene` references an image not defined in code. Disabled by default because images are often defined as files rather than in code. |
+
 ## ⚠️ Known Limitations
 
 * Embedded Python does not use a full Python language server
-* Image validation only covers code-defined images
+* Image validation only covers code-defined images (enable `warnUndefinedImages` to check)
 * Local labels are validated per file (not across files)
 
 ## 📋 Requirements

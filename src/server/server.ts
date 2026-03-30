@@ -49,6 +49,21 @@ const documents: TextDocuments<TextDocument> = new TextDocuments(TextDocument);
 // Workspace folders
 let workspaceFolders: WorkspaceFolder[] = [];
 
+// Settings
+interface Settings {
+	diagnostics: {
+		warnUndefinedImages: boolean;
+	};
+}
+
+const defaultSettings: Settings = {
+	diagnostics: {
+		warnUndefinedImages: false
+	}
+};
+
+let globalSettings: Settings = defaultSettings;
+
 // Symbol index for go-to-definition
 interface SymbolDefinition {
 	name: string;
@@ -189,6 +204,40 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
 	};
 });
 
+// Fetch configuration on startup
+connection.onInitialized(async () => {
+	try {
+		const config = await connection.workspace.getConfiguration('renpyMagic');
+		if (config) {
+			globalSettings = {
+				diagnostics: {
+					warnUndefinedImages: config.diagnostics?.warnUndefinedImages ?? false
+				}
+			};
+		}
+	} catch (e) {
+		// Configuration not available, use defaults
+	}
+});
+
+// Handle configuration changes
+connection.onDidChangeConfiguration(async () => {
+	try {
+		const config = await connection.workspace.getConfiguration('renpyMagic');
+		if (config) {
+			globalSettings = {
+				diagnostics: {
+					warnUndefinedImages: config.diagnostics?.warnUndefinedImages ?? false
+				}
+			};
+		}
+	} catch (e) {
+		globalSettings = defaultSettings;
+	}
+	// Re-validate all open documents
+	documents.all().forEach(validateDocument);
+});
+
 // Handle workspace folder changes
 connection.onNotification('workspace/didChangeWorkspaceFolders', (params: { event: { added: WorkspaceFolder[], removed: WorkspaceFolder[] } }) => {
 	// Add new folders
@@ -225,6 +274,27 @@ function indexWorkspace() {
 		}
 	}
 	connection.console.log(`Indexed ${symbolIndex.size} symbols (${labelCount} labels)`);
+
+	// Fetch configuration and re-validate all open documents
+	fetchConfigAndValidate();
+}
+
+async function fetchConfigAndValidate() {
+	try {
+		const config = await connection.workspace.getConfiguration('renpyMagic');
+		connection.console.log(`Config: ${JSON.stringify(config)}`);
+		if (config) {
+			globalSettings = {
+				diagnostics: {
+					warnUndefinedImages: config.diagnostics?.warnUndefinedImages ?? false
+				}
+			};
+		}
+	} catch (e) {
+		// Configuration not available, use defaults
+	}
+	// Re-validate all open documents
+	documents.all().forEach(validateDocument);
 }
 
 function indexDirectory(dirPath: string) {
@@ -2114,7 +2184,7 @@ async function validateDocument(textDocument: TextDocument): Promise<void> {
 				}
 			} else {
 				const definitions = symbolIndex.get(labelName);
-				if (!definitions || definitions.length === 0) {
+				if (!definitions || !definitions.some(d => d.kind === 'label')) {
 					const startChar = line.indexOf(labelName, jumpMatch.index);
 					diagnostics.push({
 						severity: DiagnosticSeverity.Warning,
@@ -2129,8 +2199,9 @@ async function validateDocument(textDocument: TextDocument): Promise<void> {
 			}
 		}
 
-		// Check for show/scene with undefined images - but skip if image can be found
-		const showMatch = line.match(/^\s*(show|scene)\s+([a-zA-Z_][a-zA-Z0-9_ ]+?)(?:\s+(?:at|with|as|behind|onlayer|zorder)\b|$)/);
+		// Check for show/scene with undefined images - but skip "show screen" which is handled separately
+		const showScreenCheck = line.match(/^\s*show\s+screen\s/);
+		const showMatch = !showScreenCheck && line.match(/^\s*(show|scene)\s+([a-zA-Z_][a-zA-Z0-9_ ]+?)(?:\s+(?:at|with|as|behind|onlayer|zorder)\b|$)/);
 		if (showMatch) {
 			const imageName = showMatch[2].trim();
 			const parts = imageName.split(/\s+/);
@@ -2162,16 +2233,28 @@ async function validateDocument(textDocument: TextDocument): Promise<void> {
 				}
 			}
 
-			// Check just the tag (might be a layeredimage or the image tag)
+			// Check just the tag - only for layeredimage (which dynamically composes images)
+			// Don't skip for regular images since those need explicit definitions
 			if (!found && symbolIndex.has(parts[0])) {
 				const defs = symbolIndex.get(parts[0]);
-				if (defs && defs.some(d => d.kind === 'layeredimage' || d.kind === 'image')) {
+				if (defs && defs.some(d => d.kind === 'layeredimage')) {
 					found = true;
 				}
 			}
 
-			// Don't warn - images are commonly defined as files, not in code
-			// This was too noisy for practical use
+			// Only warn if setting is enabled (disabled by default because images are often defined as files)
+			if (!found && globalSettings.diagnostics.warnUndefinedImages) {
+				const startChar = line.indexOf(imageName, showMatch.index);
+				diagnostics.push({
+					severity: DiagnosticSeverity.Warning,
+					range: Range.create(
+						Position.create(i, startChar),
+						Position.create(i, startChar + imageName.length)
+					),
+					message: `Image "${imageName}" is not defined in code`,
+					source: 'renpy'
+				});
+			}
 		}
 
 		// Check for call screen with undefined screen
