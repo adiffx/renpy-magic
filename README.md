@@ -1,10 +1,14 @@
-# <img src="./images/full_icon.png" style="height: 30px;"/> Ren'Py Language Support
+# Ren'Py Language Support
 
-A Visual Studio Code extension that adds rich language support for the Ren’Py visual novel engine.
+<img src="./images/full_icon.png" align="left" style="margin-right:15px; height: 100px; "/> 
+ 
+ A Visual Studio Code extension that adds rich language support for the Ren’Py visual novel engine.
 
 I originally made this for myself after running into a few small annoyances with existing extensions — mainly wanting to jump to symbols with `Cmd+R`, check whether an image reference actually exists, and jump to image definitions with `F12`.
 
 I kept adding things as I needed them while working on projects, and over time it just grew into something more complete. It’s still very much shaped by what I personally find useful, but it might be helpful to others too. It's powered by a proper language server (LSP), which makes features like navigation, diagnostics, and completions more consistent and reliable.
+
+</div>
 
 ## ✨ Features
 
