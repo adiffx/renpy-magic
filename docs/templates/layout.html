@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{title}} - @adiffx</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif; margin: 0; padding: 0; line-height: 1.6; color: #333; min-height: 100vh; display: flex; flex-direction: column; }
+    .container { max-width: 900px; margin: 0 auto; padding: 0 2rem; width: 100%; }
+    header { background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%); color: white; padding: 1.5rem 0; }
+    header .site-title { color: white; text-decoration: none; font-weight: 600; font-size: 1.3rem; display: block; }
+    header .site-title:hover { text-decoration: underline; }
+    header .tagline { color: rgba(255,255,255,0.8); font-size: 0.9rem; margin-top: 0.25rem; }
+    main { flex: 1; padding: 2rem 0; }
+    h1, h2, h3 { color: #2c3e50; }
+    h1 { border-bottom: 2px solid #3498db; padding-bottom: 0.5rem; }
+    h2 { border-bottom: 1px solid #eee; padding-bottom: 0.3rem; margin-top: 2rem; clear: both; }
+    h3 { margin-top: 1.5rem; }
+    img[align="left"] { float: left; margin-right: 1.5rem; margin-bottom: 1rem; max-height: 100px; }
+    /* Intro section with floated image */
+    .intro { overflow: hidden; margin-bottom: 1.5rem; }
+    .intro p { margin: 0 0 1rem 0; }
+    code { background: #f4f4f4; padding: 0.2rem 0.4rem; border-radius: 3px; font-size: 0.9em; }
+    pre { background: #2d2d2d; color: #f8f8f2; padding: 1rem; border-radius: 5px; overflow-x: auto; }
+    pre code { background: none; padding: 0; color: inherit; }
+    a { color: #3498db; }
+    ul { padding-left: 1.5rem; }
+    li { margin: 0.3rem 0; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+    th, td { border: 1px solid #ddd; padding: 0.5rem 0.75rem; text-align: left; }
+    th { background: #f4f4f4; }
+    blockquote { border-left: 4px solid #3498db; margin: 1rem 0; padding: 0.5rem 1rem; background: #f9f9f9; }
+    footer { background: #2c3e50; color: #ccc; padding: 1.5rem 0; text-align: center; font-size: 0.9rem; }
+    footer a { color: #3498db; }
+    footer .container { text-align: center; }
+    footer .links { margin-bottom: 0.5rem; }
+    footer .links a { margin: 0 0.5rem; }
+    a.project-card { display: block; border: 1px solid #e1e1e1; border-radius: 8px; padding: 1.5rem; margin: 1rem 0; transition: box-shadow 0.2s; text-decoration: none; color: inherit; }
+    a.project-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    a.project-card:hover h3 { text-decoration: underline; }
+    .project-card h3 { margin-top: 0; display: flex; align-items: center; gap: 0.75rem; color: #2c3e50; }
+    .project-card h3 img { height: 32px; width: 32px; }
+    .project-card p { color: #666; margin-bottom: 0; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a class="site-title" href="https://adiffx.github.io/renpy-magic/">@adiffx</a>
+      <div class="tagline">VS Code extensions for game developers</div>
+    </div>
+  </header>
+  <main>
+    <div class="container">
+      {{{content}}}
+    </div>
+  </main>
+  <footer>
+    <div class="container">
+      <div class="links">
+        {{#footerLinks}}
+        <a href="{{url}}">{{text}}</a>
+        {{^last}}<span>|</span>{{/last}}
+        {{/footerLinks}}
+        {{^footerLinks}}
+        <a href="https://github.com/adiffx">GitHub Profile</a>
+        {{/footerLinks}}
+      </div>
+      <div>&copy; {{year}} adiffx. Released under MIT License.</div>
+    </div>
+  </footer>
+</body>
+</html>

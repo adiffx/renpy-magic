@@ -8,8 +8,6 @@ I originally made this for myself after running into a few small annoyances with
 
 I kept adding things as I needed them while working on projects, and over time it just grew into something more complete. It’s still very much shaped by what I personally find useful, but it might be helpful to others too. It's powered by a proper language server (LSP), which makes features like navigation, diagnostics, and completions more consistent and reliable.
 
-</div>
-
 ## ✨ Features
 
 ### 🎨 Syntax Highlighting
