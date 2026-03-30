@@ -91,6 +91,8 @@ Navigate directly to definitions of:
 
 <img src="./images/screenshots/BuiltinAutocompletion.png" width="856" />
 
+&nbsp;
+
 <img src="./images/screenshots/CustomAutocompletion.png" width="329" />
 
 Context-aware suggestions for:
