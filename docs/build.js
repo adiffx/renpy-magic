@@ -70,19 +70,26 @@ function build() {
     }
   );
 
-  // Copy images to renpy-magic
+  // Copy images to renpy-magic (recursively)
   const imagesDir = path.join(SITE_DIR, 'renpy-magic', 'images');
-  ensureDir(imagesDir);
+  copyDirRecursive('images', imagesDir);
+  console.log('Copied images to renpy-magic/images/');
+}
 
-  const srcImages = 'images';
-  if (fs.existsSync(srcImages)) {
-    for (const file of fs.readdirSync(srcImages)) {
-      fs.copyFileSync(
-        path.join(srcImages, file),
-        path.join(imagesDir, file)
-      );
+// Recursively copy a directory
+function copyDirRecursive(src, dest) {
+  ensureDir(dest);
+  if (!fs.existsSync(src)) return;
+
+  for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+    const srcPath = path.join(src, entry.name);
+    const destPath = path.join(dest, entry.name);
+
+    if (entry.isDirectory()) {
+      copyDirRecursive(srcPath, destPath);
+    } else {
+      fs.copyFileSync(srcPath, destPath);
     }
-    console.log('Copied images to renpy-magic/images/');
   }
 }
 
