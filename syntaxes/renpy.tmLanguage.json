@@ -66,11 +66,16 @@
     "string-interpolation": {
       "patterns": [
         {
-          "name": "meta.interpolation.renpy",
-          "match": "\\[[^\\]]*\\]",
-          "captures": {
-            "0": { "name": "variable.other.interpolation.renpy" }
-          }
+          "name": "variable.other.interpolation.renpy",
+          "begin": "\\[",
+          "end": "\\]",
+          "patterns": [
+            { "include": "#string-interpolation" },
+            {
+              "name": "constant.numeric.integer.renpy",
+              "match": "\\b[0-9]+\\b"
+            }
+          ]
         }
       ]
     },
@@ -147,7 +152,7 @@
       "patterns": [
         {
           "name": "keyword.control.renpy",
-          "match": "\\b(label|menu|if|elif|else|while|for|jump|call|return|pass|screen|transform|image|define|default|init|python|style|layeredimage|show|hide|scene|with|play|stop|queue|pause|nvl|window|frame|text|textbutton|imagebutton|button|vbox|hbox|grid|fixed|side|viewport|use|transclude|on|action|has|at|as|behind|onlayer|zorder|expression)\\b"
+          "match": "\\b(label|menu|if|elif|else|while|for|jump|call|return|pass|screen|transform|image|define|default|init|python|style|layeredimage|show|hide|scene|with|play|stop|queue|pause|nvl|window|frame|text|textbutton|imagebutton|button|vbox|hbox|grid|fixed|side|viewport|use|transclude|on|action|has|at|as|behind|onlayer|zorder|expression|centered|extend)\\b"
         },
         {
           "name": "keyword.other.renpy",
@@ -196,12 +201,26 @@
     "say-statement": {
       "patterns": [
         {
+          "comment": "Say statement: character \"dialogue\"",
           "name": "meta.say.renpy",
-          "match": "^\\s*([a-zA-Z_][a-zA-Z0-9_]*)\\s+(\"[^\"]*\")",
-          "captures": {
-            "1": { "name": "entity.name.character.renpy" },
-            "2": { "name": "string.quoted.double.renpy" }
-          }
+          "begin": "^(\\s*)([a-zA-Z_][a-zA-Z0-9_]*)\\s+(\")",
+          "beginCaptures": {
+            "2": { "name": "entity.name.character.renpy" },
+            "3": { "name": "string.quoted.double.renpy" }
+          },
+          "end": "(\")",
+          "endCaptures": {
+            "1": { "name": "string.quoted.double.renpy" }
+          },
+          "contentName": "string.quoted.double.renpy",
+          "patterns": [
+            { "include": "#string-interpolation" },
+            { "include": "#string-tags" },
+            {
+              "name": "constant.character.escape.renpy",
+              "match": "\\\\."
+            }
+          ]
         }
       ]
     },
