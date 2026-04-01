@@ -429,23 +429,6 @@ function indexFile(filePath: string) {
 	}
 }
 
-// Re-index when documents change
-documents.onDidSave((change) => {
-	const filePath = URI.parse(change.document.uri).fsPath;
-	if (filePath.endsWith('.rpy') || filePath.endsWith('.rpym')) {
-		// Remove old entries for this file
-		for (const [name, defs] of symbolIndex) {
-			const filtered = defs.filter(d => d.uri !== change.document.uri);
-			if (filtered.length === 0) {
-				symbolIndex.delete(name);
-			} else {
-				symbolIndex.set(name, filtered);
-			}
-		}
-		// Re-index this file
-		indexFile(filePath);
-	}
-});
 
 // Get word at position
 function getWordAtPosition(document: TextDocument, position: TextDocumentPositionParams['position']): string {
@@ -2389,6 +2372,8 @@ documents.onDidSave((event) => {
 		// Re-index this file
 		indexFile(filePath);
 		connection.console.log(`Re-indexed ${filePath}`);
+		// Re-validate all open documents so diagnostics update across files
+		documents.all().forEach(validateDocument);
 	}
 });
 
