@@ -10,7 +10,7 @@ I kept adding things as I needed them while working on projects, and over time i
 
 ## 🚀 Installation
 
-Install from [Ren'Py Magic from VSCode Marketplace](https://marketplace.visualstudio.com/items?itemName=adiffx.renpy-language-support)
+[Install Ren'Py Magic from VSCode Marketplace](https://marketplace.visualstudio.com/items?itemName=adiffx.renpy-language-support)
 
 Or search for "**Ren'Py Magic**" in your Visual Studio Code Extension tab.
 
