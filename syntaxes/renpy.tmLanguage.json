@@ -66,6 +66,11 @@
     "string-interpolation": {
       "patterns": [
         {
+          "comment": "Escaped [ in Ren'Py strings (e.g. [[Copy] displays literal [Copy])",
+          "name": "constant.character.escape.renpy",
+          "match": "\\[\\["
+        },
+        {
           "name": "variable.other.interpolation.renpy",
           "begin": "\\[",
           "end": "\\]",
@@ -81,6 +86,11 @@
     },
     "string-tags": {
       "patterns": [
+        {
+          "comment": "Escaped { in Ren'Py strings (e.g. {{ displays literal {)",
+          "name": "constant.character.escape.renpy",
+          "match": "\\{\\{"
+        },
         {
           "name": "entity.name.tag.renpy",
           "match": "\\{[^}]*\\}"

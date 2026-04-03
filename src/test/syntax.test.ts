@@ -121,6 +121,119 @@ describe('Combined Tags and Interpolation in Dialogue', () => {
 	});
 });
 
+describe('Escaped Bracket [[ in Strings', () => {
+	// The tmLanguage matches [[ as an escape before trying interpolation.
+	// Simulate: scan left-to-right, [[ is consumed as escape, remaining text is literal.
+	const escapedBracketRegex = /\[\[/g;
+
+	function tokenize(text: string): Array<{ type: string; value: string }> {
+		const tokens: Array<{ type: string; value: string }> = [];
+		let i = 0;
+		while (i < text.length) {
+			if (text[i] === '[' && text[i + 1] === '[') {
+				tokens.push({ type: 'escape', value: '[[' });
+				i += 2;
+			} else if (text[i] === '[') {
+				// Find matching ]
+				const start = i;
+				let depth = 1;
+				i++;
+				while (i < text.length && depth > 0) {
+					if (text[i] === '[') depth++;
+					else if (text[i] === ']') depth--;
+					i++;
+				}
+				tokens.push({ type: 'interpolation', value: text.substring(start, i) });
+			} else {
+				// Accumulate plain text
+				const start = i;
+				while (i < text.length && text[i] !== '[') i++;
+				tokens.push({ type: 'text', value: text.substring(start, i) });
+			}
+		}
+		return tokens;
+	}
+
+	it('should treat [[ as escape, not interpolation', () => {
+		// [[Copy] in Ren'Py displays literal [Copy]
+		const tokens = tokenize('[[Copy]');
+		expect(tokens).toEqual([
+			{ type: 'escape', value: '[[' },
+			{ type: 'text', value: 'Copy]' }
+		]);
+	});
+
+	it('should handle [[ escape followed by real interpolation', () => {
+		const tokens = tokenize('[[literal] [real_var]');
+		expect(tokens).toEqual([
+			{ type: 'escape', value: '[[' },
+			{ type: 'text', value: 'literal] ' },
+			{ type: 'interpolation', value: '[real_var]' }
+		]);
+	});
+
+	it('should handle the bonus_galleries case', () => {
+		// {b}[persistent.player_id]{/b}  {size=-4}[[Copy]{/size}
+		const text = '[persistent.player_id]  [[Copy]';
+		const tokens = tokenize(text);
+		expect(tokens).toEqual([
+			{ type: 'interpolation', value: '[persistent.player_id]' },
+			{ type: 'text', value: '  ' },
+			{ type: 'escape', value: '[[' },
+			{ type: 'text', value: 'Copy]' }
+		]);
+	});
+
+	it('should handle multiple [[ escapes', () => {
+		const tokens = tokenize('[[a] and [[b]');
+		expect(tokens).toEqual([
+			{ type: 'escape', value: '[[' },
+			{ type: 'text', value: 'a] and ' },
+			{ type: 'escape', value: '[[' },
+			{ type: 'text', value: 'b]' }
+		]);
+	});
+
+	it('should detect [[ with regex', () => {
+		const text = '[[Copy]';
+		const matches = text.match(escapedBracketRegex);
+		expect(matches).toEqual(['[[']);
+	});
+
+	it('should not have [[ in normal interpolation', () => {
+		const text = '[player_name]';
+		const matches = text.match(escapedBracketRegex);
+		expect(matches).toBeNull();
+	});
+});
+
+describe('Escaped Brace {{ in Strings', () => {
+	const escapedBraceRegex = /\{\{/g;
+	const tagRegex = /\{[^}]*\}/g;
+
+	it('should detect {{ as escape', () => {
+		const text = '{{not a tag}';
+		const escapes = text.match(escapedBraceRegex);
+		expect(escapes).toEqual(['{{']);
+	});
+
+	it('should not match {{ as a tag', () => {
+		// After consuming {{, the remaining is 'not a tag}' which has no opening {
+		// Simulate: remove {{ first, then match tags
+		const text = '{{not a tag}';
+		const withoutEscapes = text.replace(escapedBraceRegex, '');
+		const tags = withoutEscapes.match(tagRegex);
+		expect(tags).toBeNull();
+	});
+
+	it('should handle {{ alongside real tags', () => {
+		const text = '{b}bold{/b} and {{ literal brace';
+		const withoutEscapes = text.replace(escapedBraceRegex, '');
+		const tags = withoutEscapes.match(tagRegex);
+		expect(tags).toEqual(['{b}', '{/b}']);
+	});
+});
+
 describe('Keyword Highlighting', () => {
 	const keywordRegex = /\b(label|menu|if|elif|else|while|for|jump|call|return|pass|screen|transform|image|define|default|init|python|style|layeredimage|show|hide|scene|with|play|stop|queue|pause|nvl|window|frame|text|textbutton|imagebutton|button|vbox|hbox|grid|fixed|side|viewport|use|transclude|on|action|has|at|as|behind|onlayer|zorder|expression|centered|extend)\b/;
 
