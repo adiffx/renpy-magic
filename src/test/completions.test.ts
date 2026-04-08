@@ -330,3 +330,43 @@ describe('Screen Completion Context', () => {
 		expect(showScreenRegex.test('show screen pref')).toBe(true);
 	});
 });
+
+describe('Signature Help - Function Name Extraction', () => {
+	// This is the regex used in the signature help handler
+	const sigRegex = /([a-zA-Z_][a-zA-Z0-9_.]*)\s*\([^)]*$/;
+
+	it('should extract format from .format(', () => {
+		const match = '_("Chapter {} Complete").format('.match(sigRegex);
+		expect(match).not.toBeNull();
+		expect(match![1]).toBe('format');
+	});
+
+	it('should extract format with args already typed', () => {
+		const match = '_("Chapter {} Complete").format(_ch'.match(sigRegex);
+		expect(match).not.toBeNull();
+		expect(match![1]).toBe('format');
+	});
+
+	it('should extract simple function name', () => {
+		const match = 'Character("Eileen"'.match(sigRegex);
+		expect(match).not.toBeNull();
+		expect(match![1]).toBe('Character');
+	});
+
+	it('should extract namespaced function', () => {
+		const match = 'renpy.pause('.match(sigRegex);
+		expect(match).not.toBeNull();
+		expect(match![1]).toBe('renpy.pause');
+	});
+
+	it('should extract function with multiple args', () => {
+		const match = 'Dissolve(0.5, alpha=True'.match(sigRegex);
+		expect(match).not.toBeNull();
+		expect(match![1]).toBe('Dissolve');
+	});
+
+	it('should not match when parens are closed', () => {
+		const match = 'format()'.match(sigRegex);
+		expect(match).toBeNull();
+	});
+});

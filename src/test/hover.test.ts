@@ -97,6 +97,20 @@ describe('Documentation Lookup', () => {
 		});
 	});
 
+	describe('Python Built-in Method Hover', () => {
+		it('should extract "format" from ".format(" context', () => {
+			// Simulates getWordAtPosition logic for .format(
+			const text = '_("Chapter {} Complete").format(_ch)';
+			const offset = 28; // cursor on 'f' of format
+			let start = offset;
+			let end = offset;
+			while (start > 0 && /[a-zA-Z0-9_.]/.test(text[start - 1])) start--;
+			while (end < text.length && /[a-zA-Z0-9_.]/.test(text[end])) end++;
+			let word = text.substring(start, end).replace(/^\.+|\.+$/g, '');
+			expect(word).toBe('format');
+		});
+	});
+
 	describe('Documentation Quality', () => {
 		it('config entries should have descriptions', () => {
 			const doc = getDoc('config.name');

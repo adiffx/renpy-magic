@@ -1161,6 +1161,15 @@ const signatures: Record<string, SignatureData> = {
 			{ label: 'time', documentation: 'Time for the transition' },
 			{ label: 'mode', documentation: 'Push direction (pushright, pushleft, pushup, pushdown)' }
 		]
+	},
+	// Python built-in methods commonly used in Ren'Py
+	'format': {
+		label: 'str.format(*args, **kwargs)',
+		documentation: 'Perform string formatting. Replacement fields are delimited by `{}`. For example: `"Hello, {}!".format(name)` or `"Chapter {0}: {1}".format(num, title)`.',
+		parameters: [
+			{ label: '*args', documentation: 'Positional arguments to insert into the format string at `{}` or `{0}`, `{1}`, etc.' },
+			{ label: '**kwargs', documentation: 'Keyword arguments to insert into the format string at `{name}`, `{key}`, etc.' }
+		]
 	}
 };
 
@@ -1288,6 +1297,17 @@ connection.onHover((params: TextDocumentPositionParams): Hover | null => {
 			contents: {
 				kind: MarkupKind.Markdown,
 				value: `**${word}** (built-in transition)\n\nPre-defined transition for use with \`with\` statement.`
+			}
+		};
+	}
+
+	// Check if it's a Python built-in method with signature data
+	const sigData = signatures[word];
+	if (sigData) {
+		return {
+			contents: {
+				kind: MarkupKind.Markdown,
+				value: `**${word}**\n\n\`\`\`\n${sigData.label}\n\`\`\`\n\n${sigData.documentation}`
 			}
 		};
 	}
