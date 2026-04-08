@@ -38,8 +38,8 @@ export function activate(context: ExtensionContext) {
 			{ scheme: 'file', language: 'renpy' }
 		],
 		synchronize: {
-			// Watch for .rpy file changes
-			fileEvents: undefined
+			// Watch for .rpy file changes on disk
+			fileEvents: vscode.workspace.createFileSystemWatcher('**/*.{rpy,rpym}')
 		}
 	};
 

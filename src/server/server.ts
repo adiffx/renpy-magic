@@ -32,6 +32,8 @@ import {
 	WorkspaceEdit,
 	TextEdit,
 	PrepareRenameParams,
+	FileChangeType,
+	DidChangeWatchedFilesParams,
 } from 'vscode-languageserver/node';
 
 import { TextDocument } from 'vscode-languageserver-textdocument';
@@ -255,6 +257,43 @@ connection.onNotification('workspace/didChangeWorkspaceFolders', (params: { even
 	indexWorkspace();
 });
 
+// Watch for .rpy file changes on disk (files not open in editor)
+connection.onDidChangeWatchedFiles((params: DidChangeWatchedFilesParams) => {
+	let needsReindex = false;
+	for (const change of params.changes) {
+		const filePath = URI.parse(change.uri).fsPath;
+		if (filePath.endsWith('.rpy') || filePath.endsWith('.rpym')) {
+			if (change.type === FileChangeType.Deleted) {
+				// Remove symbols from deleted file
+				for (const [name, defs] of symbolIndex) {
+					const filtered = defs.filter(d => d.uri !== change.uri);
+					if (filtered.length === 0) {
+						symbolIndex.delete(name);
+					} else {
+						symbolIndex.set(name, filtered);
+					}
+				}
+				needsReindex = true;
+			} else {
+				// Created or changed - re-index this file
+				for (const [name, defs] of symbolIndex) {
+					const filtered = defs.filter(d => d.uri !== change.uri);
+					if (filtered.length === 0) {
+						symbolIndex.delete(name);
+					} else {
+						symbolIndex.set(name, filtered);
+					}
+				}
+				indexFile(filePath);
+				needsReindex = true;
+			}
+		}
+	}
+	if (needsReindex) {
+		documents.all().forEach(validateDocument);
+	}
+});
+
 // Index all .rpy files in workspace
 function indexWorkspace() {
 	symbolIndex.clear();
@@ -319,6 +358,14 @@ function indexFile(filePath: string) {
 	try {
 		const content = fs.readFileSync(filePath, 'utf-8');
 		const uri = URI.file(filePath).toString();
+		indexContent(content, uri);
+	} catch (e) {
+		// Ignore errors
+	}
+}
+
+function indexContent(content: string, uri: string) {
+	try {
 		const lines = content.split('\n');
 
 		// Regex patterns for symbols
@@ -2373,6 +2420,20 @@ documents.onDidOpen((event) => {
 });
 
 documents.onDidChangeContent((change) => {
+	const uri = change.document.uri;
+	if (uri.endsWith('.rpy') || uri.endsWith('.rpym')) {
+		// Remove old symbols from this file
+		for (const [name, defs] of symbolIndex) {
+			const filtered = defs.filter(d => d.uri !== uri);
+			if (filtered.length === 0) {
+				symbolIndex.delete(name);
+			} else {
+				symbolIndex.set(name, filtered);
+			}
+		}
+		// Re-index from in-memory content
+		indexContent(change.document.getText(), uri);
+	}
 	validateDocument(change.document);
 });
 
