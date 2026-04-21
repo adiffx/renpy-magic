@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ren'Py Magic - Social Preview</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    background: #f0f0f0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  }
+  .card {
+    width: 1280px;
+    height: 640px;
+    background: linear-gradient(135deg, #1e1e2e 0%, #2d2040 40%, #3a1f5c 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+  }
+  /* Subtle grid pattern */
+  .card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+  /* Glow behind icon */
+  .glow {
+    position: absolute;
+    width: 400px;
+    height: 400px;
+    left: 160px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: radial-gradient(circle, rgba(255,140,50,0.15) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .content {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 64px;
+    padding: 0 80px;
+    width: 100%;
+  }
+  .icon {
+    width: 220px;
+    height: 220px;
+    border-radius: 40px;
+    flex-shrink: 0;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.08);
+  }
+  .text {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .title {
+    font-size: 72px;
+    font-weight: 700;
+    color: #ffffff;
+    letter-spacing: -1px;
+    line-height: 1.1;
+  }
+  .title span {
+    color: #ff9e64;
+  }
+  .description {
+    font-size: 26px;
+    color: rgba(255,255,255,0.6);
+    line-height: 1.5;
+    max-width: 600px;
+  }
+  .tags {
+    display: flex;
+    gap: 12px;
+    margin-top: 8px;
+  }
+  .tag {
+    font-size: 16px;
+    color: rgba(255,255,255,0.5);
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.1);
+    padding: 6px 16px;
+    border-radius: 20px;
+    letter-spacing: 0.5px;
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="glow"></div>
+    <div class="content">
+      <img class="icon" src="full_icon.png" alt="Ren'Py Magic icon">
+      <div class="text">
+        <div class="title">Ren'Py <span>Magic</span></div>
+        <div class="description">Complete language support for the Ren'Py visual novel engine in VS Code</div>
+        <div class="tags">
+          <span class="tag">Syntax Highlighting</span>
+          <span class="tag">Completions</span>
+          <span class="tag">Hover Docs</span>
+          <span class="tag">Diagnostics</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
