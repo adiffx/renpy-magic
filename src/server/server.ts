@@ -74,9 +74,13 @@ interface SymbolDefinition {
 	line: number;
 	character: number;
 	parameters?: string; // For functions: the parameter list
+	imagePath?: string; // For images: resolved file path
 }
 
 const symbolIndex: Map<string, SymbolDefinition[]> = new Map();
+
+// Map of image names to their file paths (from images/ folder auto-discovery)
+const imageFilePaths: Map<string, string> = new Map();
 
 // User-defined function signatures (populated during indexing)
 const userFunctionSignatures: Map<string, SignatureData> = new Map();
@@ -303,6 +307,7 @@ function indexWorkspace() {
 		const folderPath = URI.parse(folder.uri).fsPath;
 		connection.console.log(`Indexing workspace folder: ${folderPath}`);
 		indexDirectory(folderPath);
+		scanImageFiles(folderPath);
 	}
 
 	// Count labels for debugging
@@ -312,7 +317,7 @@ function indexWorkspace() {
 			labelCount++;
 		}
 	}
-	connection.console.log(`Indexed ${symbolIndex.size} symbols (${labelCount} labels)`);
+	connection.console.log(`Indexed ${symbolIndex.size} symbols (${labelCount} labels, ${imageFilePaths.size} image files)`);
 
 	// Fetch configuration and re-validate all open documents
 	fetchConfigAndValidate();
@@ -433,6 +438,15 @@ function indexContent(content: string, uri: string) {
 					existing.push(symbol);
 					symbolIndex.set(name, existing);
 
+					// For images, extract the file path from the definition
+					// Handles: image x = "path.png" and image x = Movie(play="path.webm")
+					if (kind === 'image') {
+						const pathMatch = line.match(/(?:=\s*|play\s*=\s*)["']([^"']+\.(?:png|jpg|jpeg|webp|mp4|webm|ogv|avi|mkv))["']/i);
+						if (pathMatch) {
+							symbol.imagePath = pathMatch[1];
+						}
+					}
+
 					// For images, index various combinations for flexible matching
 					// e.g., "cg ch05 kelly_topless_01" should match "cg kelly_topless_01"
 					if (kind === 'image') {
@@ -476,6 +490,173 @@ function indexContent(content: string, uri: string) {
 	}
 }
 
+const imageExtensions = new Set(['.png', '.jpg', '.jpeg', '.webp']);
+const videoExtensions = new Set(['.mp4', '.webm', '.ogv', '.avi', '.mkv']);
+
+// Get image dimensions using image-size library (reads only file header)
+function getImageDimensions(filePath: string): { width: number; height: number } | null {
+	try {
+		const sizeOf = require('image-size');
+		const fd = fs.openSync(filePath, 'r');
+		const buf = Buffer.alloc(64 * 1024);
+		const bytesRead = fs.readSync(fd, buf, 0, buf.length, 0);
+		fs.closeSync(fd);
+		const dims = sizeOf.imageSize(buf.subarray(0, bytesRead));
+		if (dims && dims.width && dims.height) {
+			return { width: dims.width, height: dims.height };
+		}
+	} catch (e) {
+		// Ignore errors
+	}
+	return null;
+}
+
+// Get the markdown sizing parameter for an image (fit within hover tooltip)
+function getImageSizeParam(filePath: string): string {
+	const dims = getImageDimensions(filePath);
+	if (!dims) return 'width=300';
+
+	const maxWidth = 400;
+	const maxHeight = 200;
+
+	const scaleW = maxWidth / dims.width;
+	const scaleH = maxHeight / dims.height;
+	const scale = Math.min(scaleW, scaleH, 1);
+
+	const w = Math.round(dims.width * scale);
+	const h = Math.round(dims.height * scale);
+
+	if (scaleW < scaleH) {
+		return `width=${w}`;
+	} else {
+		return `height=${h}`;
+	}
+}
+
+function isVideoFile(filePath: string): boolean {
+	return videoExtensions.has(path.extname(filePath).toLowerCase());
+}
+
+function getImageHoverContent(imageName: string, filePath: string): string {
+	const fileUri = URI.file(filePath).toString();
+	if (isVideoFile(filePath)) {
+		return `${path.basename(filePath)} (video)`;
+	}
+	return `![${imageName}](${fileUri}|${getImageSizeParam(filePath)})`;
+}
+
+// Scan for image files in the workspace (Ren'Py auto-discovers images in images/ folder)
+function scanImageFiles(rootPath: string) {
+	imageFilePaths.clear();
+
+	function scanDir(dirPath: string, prefix: string[]) {
+		try {
+			const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+			for (const entry of entries) {
+				const fullPath = path.join(dirPath, entry.name);
+				if (entry.isDirectory() && !entry.name.startsWith('.')) {
+					scanDir(fullPath, [...prefix, entry.name]);
+				} else if (entry.isFile()) {
+					const ext = path.extname(entry.name).toLowerCase();
+					if (imageExtensions.has(ext) || videoExtensions.has(ext)) {
+						// Build the image name from directory structure + filename
+						// e.g., images/eileen/happy.png -> "eileen happy"
+						// e.g., images/cg/beach.png -> "cg beach"
+						// e.g., images/bg room.png -> "bg room"
+						const baseName = path.basename(entry.name, ext).replace(/_/g, ' ');
+						const nameParts = [...prefix, baseName];
+						const imageName = nameParts.join(' ').toLowerCase();
+						imageFilePaths.set(imageName, fullPath);
+
+						// Also index with underscores preserved
+						const nameWithUnderscores = [...prefix, path.basename(entry.name, ext)].join(' ').toLowerCase();
+						if (nameWithUnderscores !== imageName) {
+							imageFilePaths.set(nameWithUnderscores, fullPath);
+						}
+					}
+				}
+			}
+		} catch (e) {
+			// Ignore errors
+		}
+	}
+
+	// Find game/images directories by looking at indexed .rpy file locations
+	const gameDirs = new Set<string>();
+	for (const [, defs] of symbolIndex) {
+		for (const def of defs) {
+			const gd = findGameDir(URI.parse(def.uri).fsPath);
+			if (gd) gameDirs.add(gd);
+		}
+	}
+
+	// Scan images/ inside each game dir
+	for (const gd of gameDirs) {
+		const imagesPath = path.join(gd, 'images');
+		if (fs.existsSync(imagesPath)) {
+			scanDir(imagesPath, []);
+		}
+	}
+
+	// Also try workspace-relative paths
+	const imagesDirs = ['images', 'game/images'];
+	for (const dir of imagesDirs) {
+		const imagesPath = path.join(rootPath, dir);
+		if (fs.existsSync(imagesPath)) {
+			scanDir(imagesPath, []);
+		}
+	}
+}
+
+// Resolve an image name to a file path
+// Find the game/ directory by walking up from a file path
+function findGameDir(filePath: string): string | null {
+	let dir = path.dirname(filePath);
+	// Walk up looking for a directory named "game"
+	while (dir !== path.dirname(dir)) {
+		if (path.basename(dir) === 'game') {
+			return dir;
+		}
+		dir = path.dirname(dir);
+	}
+	return null;
+}
+
+function resolveImagePath(imageName: string): string | null {
+	// 1. Check if the image definition has an explicit path
+	const defs = symbolIndex.get(imageName);
+	if (defs) {
+		for (const def of defs) {
+			if (def.kind === 'image' && def.imagePath) {
+				// Resolve relative to the game/ directory
+				// In Ren'Py, image paths are relative to game/
+				// Find game/ dir by walking up from the defining .rpy file
+				const defFilePath = URI.parse(def.uri).fsPath;
+				const gameDir = findGameDir(defFilePath);
+				if (gameDir) {
+					const candidate = path.join(gameDir, def.imagePath);
+					if (fs.existsSync(candidate)) {
+						return candidate;
+					}
+				}
+			}
+		}
+	}
+
+	// 2. Check auto-discovered image files
+	const normalizedName = imageName.toLowerCase();
+	const filePath = imageFilePaths.get(normalizedName);
+	if (filePath) return filePath;
+
+	// 3. Try with underscores replaced by spaces
+	const withSpaces = normalizedName.replace(/_/g, ' ');
+	if (withSpaces !== normalizedName) {
+		const filePath2 = imageFilePaths.get(withSpaces);
+		if (filePath2) return filePath2;
+	}
+
+	return null;
+}
 
 // Get word at position
 function getWordAtPosition(document: TextDocument, position: TextDocumentPositionParams['position']): string {
@@ -1357,6 +1538,54 @@ connection.onHover((params: TextDocumentPositionParams): Hover | null => {
 				value: `**${word}**\n\n\`\`\`\n${sigData.label}\n\`\`\`\n\n${sigData.documentation}`
 			}
 		};
+	}
+
+	// Check for image preview on show/scene/hide statements
+	const text = document.getText();
+	const lines = text.split('\n');
+	const line = lines[params.position.line] || '';
+	const showMatch = line.match(/\b(show|scene)\s+(.+?)(?:\s+(?:at|with|as|behind|onlayer|zorder)\b|$)/);
+	if (showMatch) {
+		// Skip "show screen"
+		const afterKeyword = showMatch[2].trim();
+		if (!afterKeyword.startsWith('screen ')) {
+			const imageName = afterKeyword;
+			const namesToTry = [imageName];
+			const parts = imageName.split(/\s+/);
+			if (parts.length > 1) {
+				namesToTry.push(parts.slice(1).join(' '));
+				namesToTry.push(parts[0] + ' ' + parts[parts.length - 1]);
+				namesToTry.push(parts[parts.length - 1]);
+			}
+			namesToTry.push(imageName.replace(/\s+/g, '_'));
+
+			for (const name of namesToTry) {
+				const imgPath = resolveImagePath(name);
+				if (imgPath) {
+					return {
+						contents: {
+							kind: MarkupKind.Markdown,
+							value: getImageHoverContent(imageName, imgPath)
+						}
+					};
+				}
+			}
+		}
+	}
+
+	// Check for image definition lines: image foo = "path.png"
+	const imageDefMatch = line.match(/^\s*(?:init\s+(?:-?\d+\s+)?)?image\s+([a-zA-Z_][a-zA-Z0-9_ ]+?)\s*=/);
+	if (imageDefMatch) {
+		const imageName = imageDefMatch[1].trim();
+		const imgPath = resolveImagePath(imageName);
+		if (imgPath) {
+			return {
+				contents: {
+					kind: MarkupKind.Markdown,
+					value: getImageHoverContent(imageName, imgPath)
+				}
+			};
+		}
 	}
 
 	return null;

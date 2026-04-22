@@ -46,6 +46,16 @@ Also includes:
 * Classes and transitions (`Transform`, `Dissolve`, `Fade`, etc.)
 * Full support for dotted names (e.g. `config.name`)
 
+#### Image preview
+
+Image preview on hover — hover over `show` or `scene` statements to see a preview of the referenced sprite, scene or CG.
+
+<img src="./images/screenshots/ImageHoverCg.png" width="481" />
+
+&nbsp;
+
+<img src="./images/screenshots/ImageHoverSprite.png" width="249" />
+
 ### 🔎 Navigation & Code Intelligence
 
 #### Go to Symbol (`Cmd+Shift+O` / `Ctrl+Shift+O`)
