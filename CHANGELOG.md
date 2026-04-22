@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.1.1] - 2026-04-23
+
+### Added
+- Image preview on hover for `show` and `scene` statements (sprites, CGs, backgrounds)
+- Video file support in image definitions (`Movie(play="...")`)
+
 ## [1.0.9] - 2026-04-10
 
 ### Added

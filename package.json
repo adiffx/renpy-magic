@@ -2,7 +2,7 @@
   "name": "renpy-language-support",
   "displayName": "Ren'Py Magic",
   "description": "Complete language support for Ren'Py visual novel engine - syntax highlighting, completions, hover docs, go-to-definition, and diagnostics",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "publisher": "adiffx",
   "author": {
     "name": "adiffx"
