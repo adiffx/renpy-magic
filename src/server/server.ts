@@ -41,6 +41,7 @@ import { renpyDocs, getAllSymbols, getDoc, DocEntry, getEntriesByNamespace } fro
 import * as fs from 'fs';
 import * as path from 'path';
 import { URI } from 'vscode-uri';
+import { execFile } from 'child_process';
 
 // Create a connection for the server
 const connection = createConnection(ProposedFeatures.all);
@@ -56,15 +57,29 @@ interface Settings {
 	diagnostics: {
 		warnUndefinedImages: boolean;
 	};
+	renpySdkPath: string;
+	lint: {
+		enabled: boolean;
+		onSave: boolean;
+	};
 }
 
 const defaultSettings: Settings = {
 	diagnostics: {
 		warnUndefinedImages: false
+	},
+	renpySdkPath: '',
+	lint: {
+		enabled: false,
+		onSave: true
 	}
 };
 
 let globalSettings: Settings = defaultSettings;
+
+// Lint state
+let lintDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+const lintDiagnostics: Map<string, Diagnostic[]> = new Map(); // URI -> lint diagnostics
 
 // Symbol index for go-to-definition
 interface SymbolDefinition {
@@ -218,6 +233,11 @@ connection.onInitialized(async () => {
 			globalSettings = {
 				diagnostics: {
 					warnUndefinedImages: config.diagnostics?.warnUndefinedImages ?? false
+				},
+				renpySdkPath: config.renpySdkPath ?? '',
+				lint: {
+					enabled: config.lint?.enabled ?? false,
+					onSave: config.lint?.onSave ?? true
 				}
 			};
 		}
@@ -234,6 +254,11 @@ connection.onDidChangeConfiguration(async () => {
 			globalSettings = {
 				diagnostics: {
 					warnUndefinedImages: config.diagnostics?.warnUndefinedImages ?? false
+				},
+				renpySdkPath: config.renpySdkPath ?? '',
+				lint: {
+					enabled: config.lint?.enabled ?? false,
+					onSave: config.lint?.onSave ?? true
 				}
 			};
 		}
@@ -331,6 +356,11 @@ async function fetchConfigAndValidate() {
 			globalSettings = {
 				diagnostics: {
 					warnUndefinedImages: config.diagnostics?.warnUndefinedImages ?? false
+				},
+				renpySdkPath: config.renpySdkPath ?? '',
+				lint: {
+					enabled: config.lint?.enabled ?? false,
+					onSave: config.lint?.onSave ?? true
 				}
 			};
 		}
@@ -2385,6 +2415,265 @@ function collectRenameEditsInFile(filePath: string, oldName: string, newName: st
 	}
 }
 
+// ============================================================================
+// Ren'Py Lint Integration
+// ============================================================================
+
+interface LintError {
+	file: string;
+	line: number;
+	message: string;
+	severity: 'error' | 'warning';
+}
+
+// Find the project root (directory containing 'game' folder)
+function findProjectRoot(filePath: string): string | null {
+	let dir = path.dirname(filePath);
+	while (dir !== path.dirname(dir)) {
+		if (fs.existsSync(path.join(dir, 'game'))) {
+			return dir;
+		}
+		dir = path.dirname(dir);
+	}
+	return null;
+}
+
+// Parse Ren'Py lint output into structured errors
+function parseLintOutput(output: string, projectRoot: string): LintError[] {
+	const errors: LintError[] = [];
+	const lines = output.split('\n');
+
+	// Pattern 1: File "path", line N: message
+	const fileLinePattern = /File "([^"]+)", line (\d+)(?::\d+)?[,:]\s*(.+)/;
+	// Pattern 2: path:line message (used for some warnings)
+	const pathLinePattern = /^([^:]+\.rpy[mc]?):(\d+)\s+(.+)/;
+	// Pattern 3: path:line: message
+	const pathLineColonPattern = /^([^:]+\.rpy[mc]?):(\d+):\s*(.+)/;
+
+	for (let i = 0; i < lines.length; i++) {
+		const line = lines[i].trim();
+		if (!line) continue;
+
+		let match = line.match(fileLinePattern);
+		if (match) {
+			const filePath = match[1];
+			const lineNum = parseInt(match[2], 10);
+			let message = match[3].trim();
+
+			// Check for continuation on next line (common in Ren'Py errors)
+			if (i + 1 < lines.length && !lines[i + 1].match(/^(File |[a-zA-Z]:|\/)/)) {
+				const nextLine = lines[i + 1].trim();
+				if (nextLine && !nextLine.startsWith('^')) {
+					message += ' ' + nextLine;
+				}
+			}
+
+			errors.push({
+				file: filePath,
+				line: lineNum,
+				message,
+				severity: message.toLowerCase().includes('error') ? 'error' : 'warning'
+			});
+			continue;
+		}
+
+		match = line.match(pathLineColonPattern);
+		if (match) {
+			errors.push({
+				file: match[1],
+				line: parseInt(match[2], 10),
+				message: match[3].trim(),
+				severity: 'warning'
+			});
+			continue;
+		}
+
+		match = line.match(pathLinePattern);
+		if (match) {
+			errors.push({
+				file: match[1],
+				line: parseInt(match[2], 10),
+				message: match[3].trim(),
+				severity: 'warning'
+			});
+		}
+	}
+
+	return errors;
+}
+
+// Run Ren'Py lint on the project
+function runRenpyLint(projectRoot: string): Promise<LintError[]> {
+	return new Promise((resolve) => {
+		const sdkPath = globalSettings.renpySdkPath;
+		if (!sdkPath) {
+			resolve([]);
+			return;
+		}
+
+		// Determine the correct executable based on platform
+		const isMac = process.platform === 'darwin';
+		const isWindows = process.platform === 'win32';
+
+		let renpyExecutable: string;
+		if (isWindows) {
+			renpyExecutable = path.join(sdkPath, 'renpy.exe');
+		} else if (isMac) {
+			// On macOS, use the executable inside renpy.app to avoid permission issues
+			renpyExecutable = path.join(sdkPath, 'renpy.app', 'Contents', 'MacOS', 'renpy');
+		} else {
+			renpyExecutable = path.join(sdkPath, 'renpy.sh');
+		}
+
+		if (!fs.existsSync(renpyExecutable)) {
+			connection.window.showErrorMessage(`Ren'Py executable not found at: ${renpyExecutable}. Please check your renpyMagic.renpySdkPath setting.`);
+			resolve([]);
+			return;
+		}
+
+		connection.console.log(`Running Ren'Py lint on: ${projectRoot}`);
+
+		const args = [projectRoot, 'lint', '--error-code'];
+		const options = {
+			timeout: 60000, // 60 second timeout
+			maxBuffer: 10 * 1024 * 1024, // 10MB buffer
+			cwd: sdkPath, // Run from SDK directory
+			env: {
+				...process.env,
+				// Suppress audio/video drivers for headless operation
+				SDL_AUDIODRIVER: 'dummy',
+				SDL_VIDEODRIVER: 'dummy',
+				// Set RENPY_PATH for the executable to find its resources
+				RENPY_PATH: sdkPath
+			}
+		};
+
+		execFile(renpyExecutable, args, options, (error, stdout, stderr) => {
+			const output = stdout + '\n' + stderr;
+
+			// Check for permission or execution errors
+			if (output.includes('Operation not permitted') || output.includes('Permission denied')) {
+				connection.window.showErrorMessage(
+					'Ren\'Py lint failed: Permission denied. On macOS, grant Full Disk Access to VS Code in System Settings → Privacy & Security.'
+				);
+				resolve([]);
+				return;
+			}
+
+			// Check for other execution failures (no valid lint output)
+			if (error && !output.includes('File "') && !output.match(/\.rpy[mc]?:\d+/)) {
+				connection.window.showErrorMessage(`Ren'Py lint failed to run: ${error.message}`);
+				resolve([]);
+				return;
+			}
+
+			connection.console.log(`Ren'Py lint output (first 2000 chars): ${output.substring(0, 2000)}`);
+			const errors = parseLintOutput(output, projectRoot);
+			connection.console.log(`Ren'Py lint found ${errors.length} issues`);
+			resolve(errors);
+		});
+	});
+}
+
+// Convert lint errors to VS Code diagnostics
+function lintErrorsToDiagnostics(errors: LintError[], projectRoot: string): Map<string, Diagnostic[]> {
+	const diagnosticsMap = new Map<string, Diagnostic[]>();
+
+	for (const error of errors) {
+		// Resolve relative paths
+		let filePath = error.file;
+		if (!path.isAbsolute(filePath)) {
+			filePath = path.join(projectRoot, filePath);
+		}
+
+		// Normalize path and convert to URI
+		filePath = path.normalize(filePath);
+		const uri = URI.file(filePath).toString();
+
+		if (!diagnosticsMap.has(uri)) {
+			diagnosticsMap.set(uri, []);
+		}
+
+		const lineNum = Math.max(0, error.line - 1); // Convert to 0-based
+		const diagnostic: Diagnostic = {
+			severity: error.severity === 'error' ? DiagnosticSeverity.Error : DiagnosticSeverity.Warning,
+			range: Range.create(
+				Position.create(lineNum, 0),
+				Position.create(lineNum, 1000) // Highlight whole line
+			),
+			message: error.message,
+			source: 'renpy-lint'
+		};
+
+		diagnosticsMap.get(uri)!.push(diagnostic);
+	}
+
+	return diagnosticsMap;
+}
+
+// Run lint with debouncing
+function scheduleLint() {
+	connection.console.log(`scheduleLint called - enabled: ${globalSettings.lint.enabled}, sdkPath: ${globalSettings.renpySdkPath}`);
+	if (!globalSettings.lint.enabled || !globalSettings.renpySdkPath) {
+		connection.console.log('Lint not enabled or no SDK path configured');
+		return;
+	}
+
+	// Clear any pending lint
+	if (lintDebounceTimer) {
+		clearTimeout(lintDebounceTimer);
+	}
+
+	// Debounce: wait 2 seconds after last change before running lint
+	lintDebounceTimer = setTimeout(async () => {
+		// Find project root from any open document
+		const docs = documents.all();
+		if (docs.length === 0) return;
+
+		const filePath = URI.parse(docs[0].uri).fsPath;
+		const projectRoot = findProjectRoot(filePath);
+		if (!projectRoot) {
+			connection.console.log('Could not find Ren\'Py project root (no game/ folder)');
+			return;
+		}
+
+		try {
+			const errors = await runRenpyLint(projectRoot);
+			const newDiagnostics = lintErrorsToDiagnostics(errors, projectRoot);
+
+			// Clear old lint diagnostics
+			for (const [uri] of lintDiagnostics) {
+				if (!newDiagnostics.has(uri)) {
+					lintDiagnostics.delete(uri);
+					// Re-send diagnostics for this file without lint errors
+					const doc = documents.get(uri);
+					if (doc) {
+						validateDocument(doc);
+					} else {
+						connection.sendDiagnostics({ uri, diagnostics: [] });
+					}
+				}
+			}
+
+			// Update lint diagnostics
+			lintDiagnostics.clear();
+			for (const [uri, diags] of newDiagnostics) {
+				lintDiagnostics.set(uri, diags);
+			}
+
+			// Re-validate all open documents to merge diagnostics
+			documents.all().forEach(validateDocument);
+
+		} catch (e) {
+			connection.console.error(`Ren'Py lint failed: ${e}`);
+		}
+	}, 2000);
+}
+
+// ============================================================================
+// Built-in Validation
+// ============================================================================
+
 // Check if a line is inside a comment or string context
 function isInComment(line: string): boolean {
 	const trimmed = line.trim();
@@ -2639,8 +2928,12 @@ async function validateDocument(textDocument: TextDocument): Promise<void> {
 		}
 	}
 
+	// Merge with lint diagnostics if available
+	const lintDiags = lintDiagnostics.get(textDocument.uri) || [];
+	const allDiagnostics = [...diagnostics, ...lintDiags];
+
 	// Send diagnostics
-	connection.sendDiagnostics({ uri: textDocument.uri, diagnostics });
+	connection.sendDiagnostics({ uri: textDocument.uri, diagnostics: allDiagnostics });
 }
 
 // Validate documents on open and save
@@ -2684,6 +2977,11 @@ documents.onDidSave((event) => {
 		connection.console.log(`Re-indexed ${filePath}`);
 		// Re-validate all open documents so diagnostics update across files
 		documents.all().forEach(validateDocument);
+
+		// Schedule Ren'Py lint if enabled
+		if (globalSettings.lint.enabled && globalSettings.lint.onSave) {
+			scheduleLint();
+		}
 	}
 });
 

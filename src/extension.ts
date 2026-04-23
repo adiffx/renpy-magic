@@ -39,7 +39,9 @@ export function activate(context: ExtensionContext) {
 		],
 		synchronize: {
 			// Watch for .rpy file changes on disk
-			fileEvents: vscode.workspace.createFileSystemWatcher('**/*.{rpy,rpym}')
+			fileEvents: vscode.workspace.createFileSystemWatcher('**/*.{rpy,rpym}'),
+			// Notify server when configuration changes
+			configurationSection: 'renpyMagic'
 		}
 	};
 

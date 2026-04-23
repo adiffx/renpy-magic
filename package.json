@@ -2,7 +2,7 @@
   "name": "renpy-language-support",
   "displayName": "Ren'Py Magic",
   "description": "Complete language support for Ren'Py visual novel engine - syntax highlighting, completions, hover docs, go-to-definition, and diagnostics",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "publisher": "adiffx",
   "author": {
     "name": "adiffx"
@@ -69,6 +69,21 @@
           "type": "boolean",
           "default": false,
           "description": "Warn when show/scene references an image not defined in code. Disabled by default because images are often defined as files rather than in code."
+        },
+        "renpyMagic.renpySdkPath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Path to the Ren'Py SDK folder. This is the folder you downloaded from [renpy.org](https://www.renpy.org/latest.html) that contains `renpy.sh` (macOS/Linux) or `renpy.exe` (Windows).\n\nExamples:\n- macOS: `/Applications/renpy-8.3.0-sdk`\n- Windows: `C:\\renpy-8.3.0-sdk`\n- Linux: `/home/user/renpy-8.3.0-sdk`"
+        },
+        "renpyMagic.lint.enabled": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Enable native Ren'Py lint integration for more accurate error detection. Requires `#renpyMagic.renpySdkPath#` to be set. When enabled, lint runs on save and reports errors from Ren'Py's actual compiler."
+        },
+        "renpyMagic.lint.onSave": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Run Ren'Py lint automatically when you save a file. Disable this if you prefer to run lint manually or if it's too slow on large projects."
         }
       }
     }

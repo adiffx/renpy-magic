@@ -183,17 +183,31 @@ src/server/renpy-api.json
 | Setting | Default | Description |
 | ------- | ------- | ----------- |
 | `renpyMagic.diagnostics.warnUndefinedImages` | `false` | Warn when `show`/`scene` references an image not defined in code. Disabled by default because images are often defined as files rather than in code. |
+| `renpyMagic.renpySdkPath` | `""` | Path to the Ren'Py SDK folder. When set, enables native Ren'Py lint for more accurate error detection. |
+| `renpyMagic.lint.enabled` | `false` | Enable native Ren'Py lint integration. Requires `renpySdkPath` to be set. |
+| `renpyMagic.lint.onSave` | `true` | Run Ren'Py lint automatically on file save. |
+
+### Native Ren'Py Lint (Optional)
+
+For more accurate error detection, you can enable native Ren'Py lint integration:
+
+1. Download the [Ren'Py SDK](https://www.renpy.org/latest.html)
+2. Set `renpyMagic.renpySdkPath` to the SDK folder path (e.g., `/Applications/renpy-8.3.0-sdk`)
+3. Enable `renpyMagic.lint.enabled`
+
+When enabled, the extension will run Ren'Py's native lint tool on save, providing errors and warnings from the actual compiler alongside the built-in diagnostics.
 
 ## ⚠️ Known Limitations
 
 * Embedded Python does not use a full Python language server
 * Image validation only covers code-defined images (enable `warnUndefinedImages` to check)
 * Local labels are validated per file (not across files)
+* Native lint requires the Ren'Py SDK and may take a few seconds to run on large projects
 
 ## 📋 Requirements
 
 * VS Code **1.75.0+**
-* No external runtime dependencies (pure TypeScript implementation)
+* (Optional) Ren'Py SDK for native lint integration
 
 ## 📄 License
 
