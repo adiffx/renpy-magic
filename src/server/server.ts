@@ -79,6 +79,8 @@ let globalSettings: Settings = defaultSettings;
 
 // Lint state
 let lintDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+let lintIsRunning = false;
+let lintPendingAfterCurrent = false;
 const lintDiagnostics: Map<string, Diagnostic[]> = new Map(); // URI -> lint diagnostics
 
 // Symbol index for go-to-definition
@@ -320,6 +322,10 @@ connection.onDidChangeWatchedFiles((params: DidChangeWatchedFilesParams) => {
 	}
 	if (needsReindex) {
 		documents.all().forEach(validateDocument);
+		// Run Ren'Py lint if enabled (files changed on disk, e.g. by external tools)
+		if (globalSettings.lint.enabled && globalSettings.lint.onSave) {
+			scheduleLint();
+		}
 	}
 });
 
@@ -2567,7 +2573,6 @@ function runRenpyLint(projectRoot: string): Promise<LintError[]> {
 				return;
 			}
 
-			connection.console.log(`Ren'Py lint output (first 2000 chars): ${output.substring(0, 2000)}`);
 			const errors = parseLintOutput(output, projectRoot);
 			connection.console.log(`Ren'Py lint found ${errors.length} issues`);
 			resolve(errors);
@@ -2613,9 +2618,13 @@ function lintErrorsToDiagnostics(errors: LintError[], projectRoot: string): Map<
 
 // Run lint with debouncing
 function scheduleLint() {
-	connection.console.log(`scheduleLint called - enabled: ${globalSettings.lint.enabled}, sdkPath: ${globalSettings.renpySdkPath}`);
 	if (!globalSettings.lint.enabled || !globalSettings.renpySdkPath) {
-		connection.console.log('Lint not enabled or no SDK path configured');
+		return;
+	}
+
+	// If lint is already running, mark that we need another run when it finishes
+	if (lintIsRunning) {
+		lintPendingAfterCurrent = true;
 		return;
 	}
 
@@ -2626,6 +2635,8 @@ function scheduleLint() {
 
 	// Debounce: wait 2 seconds after last change before running lint
 	lintDebounceTimer = setTimeout(async () => {
+		lintDebounceTimer = null;
+
 		// Find project root from any open document
 		const docs = documents.all();
 		if (docs.length === 0) return;
@@ -2637,6 +2648,7 @@ function scheduleLint() {
 			return;
 		}
 
+		lintIsRunning = true;
 		try {
 			const errors = await runRenpyLint(projectRoot);
 			const newDiagnostics = lintErrorsToDiagnostics(errors, projectRoot);
@@ -2666,6 +2678,13 @@ function scheduleLint() {
 
 		} catch (e) {
 			connection.console.error(`Ren'Py lint failed: ${e}`);
+		} finally {
+			lintIsRunning = false;
+			// If files changed while lint was running, schedule another run
+			if (lintPendingAfterCurrent) {
+				lintPendingAfterCurrent = false;
+				scheduleLint();
+			}
 		}
 	}, 2000);
 }
