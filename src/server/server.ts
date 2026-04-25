@@ -288,9 +288,10 @@ connection.onNotification('workspace/didChangeWorkspaceFolders', (params: { even
 	indexWorkspace();
 });
 
-// Watch for .rpy file changes on disk (files not open in editor)
+// Watch for .rpy and asset file changes on disk (files not open in editor)
 connection.onDidChangeWatchedFiles((params: DidChangeWatchedFilesParams) => {
 	let needsReindex = false;
+	let assetsChanged = false;
 	for (const change of params.changes) {
 		const filePath = URI.parse(change.uri).fsPath;
 		if (filePath.endsWith('.rpy') || filePath.endsWith('.rpym')) {
@@ -318,14 +319,17 @@ connection.onDidChangeWatchedFiles((params: DidChangeWatchedFilesParams) => {
 				indexFile(filePath);
 				needsReindex = true;
 			}
+		} else {
+			// Asset file changed (image, video) - trigger lint without re-indexing symbols
+			assetsChanged = true;
 		}
 	}
 	if (needsReindex) {
 		documents.all().forEach(validateDocument);
-		// Run Ren'Py lint if enabled (files changed on disk, e.g. by external tools)
-		if (globalSettings.lint.enabled && globalSettings.lint.onSave) {
-			scheduleLint();
-		}
+	}
+	// Run Ren'Py lint if enabled (covers both .rpy changes and asset changes)
+	if ((needsReindex || assetsChanged) && globalSettings.lint.enabled && globalSettings.lint.onSave) {
+		scheduleLint();
 	}
 });
 

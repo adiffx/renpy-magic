@@ -38,8 +38,12 @@ export function activate(context: ExtensionContext) {
 			{ scheme: 'file', language: 'renpy' }
 		],
 		synchronize: {
-			// Watch for .rpy file changes on disk
-			fileEvents: vscode.workspace.createFileSystemWatcher('**/*.{rpy,rpym}'),
+			// Watch for .rpy file changes and image/audio asset changes on disk
+			// (asset changes affect what Ren'Py lint considers defined)
+			fileEvents: [
+				vscode.workspace.createFileSystemWatcher('**/*.{rpy,rpym}'),
+				vscode.workspace.createFileSystemWatcher('**/game/**/*.{png,jpg,jpeg,webp,webm,mp4,ogv,avi,mkv}')
+			],
 			// Notify server when configuration changes
 			configurationSection: 'renpyMagic'
 		}
