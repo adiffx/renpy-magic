@@ -153,6 +153,47 @@ describe('Symbol Extraction Patterns', () => {
 		});
 	});
 
+	describe('Image Index Variants', () => {
+		// Replicates the indexing logic used by the server. For each image
+		// definition we index multiple variants for flexible matching, but
+		// must NOT index the last attribute alone (e.g. "soft") since common
+		// attributes would collide between unrelated characters/chapters.
+		function getIndexedNames(fullName: string): string[] {
+			const names = [fullName];
+			const parts = fullName.split(/\s+/);
+			if (parts.length > 1) {
+				names.push(parts[0]); // tag
+				names.push(parts.slice(1).join(' ')); // rest without tag
+				if (parts.length > 2) {
+					names.push(parts[0] + ' ' + parts[parts.length - 1]); // tag + last
+				}
+			}
+			return names;
+		}
+
+		it('indexes the full name and tag for two-part images', () => {
+			const names = getIndexedNames('eileen happy');
+			expect(names).toContain('eileen happy');
+			expect(names).toContain('eileen');
+			expect(names).toContain('happy');
+		});
+
+		it('indexes tag, rest, and tag+last for three-part images', () => {
+			const names = getIndexedNames('kelly ch01 soft');
+			expect(names).toContain('kelly ch01 soft');
+			expect(names).toContain('kelly');
+			expect(names).toContain('ch01 soft');
+			expect(names).toContain('kelly soft');
+		});
+
+		it('does NOT index the last attribute alone', () => {
+			// Regression: previously "soft" alone was indexed, causing
+			// "kelly_casual soft" to wrongly match "kelly ch01 soft"
+			const names = getIndexedNames('kelly ch01 soft');
+			expect(names).not.toContain('soft');
+		});
+	});
+
 	describe('Define/Default Statements', () => {
 		const defineRegex = /^(\s*)(define|default)\s+([a-zA-Z_][a-zA-Z0-9_.]*)\s*=/;
 

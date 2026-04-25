@@ -182,9 +182,8 @@ describe('Documentation Lookup', () => {
 			const namesToTry = [imageName];
 			const parts = imageName.split(/\s+/);
 			if (parts.length > 1) {
-				namesToTry.push(parts.slice(1).join(' '));
+				// Tag + last part (preserves character/CG identity)
 				namesToTry.push(parts[0] + ' ' + parts[parts.length - 1]);
-				namesToTry.push(parts[parts.length - 1]);
 			}
 			namesToTry.push(imageName.replace(/\s+/g, '_'));
 			return namesToTry;
@@ -198,23 +197,31 @@ describe('Documentation Lookup', () => {
 		it('should generate variants for two-part image', () => {
 			const variants = getNameVariants('eileen happy');
 			expect(variants).toContain('eileen happy');
-			expect(variants).toContain('happy');
 			expect(variants).toContain('eileen_happy');
 		});
 
 		it('should generate variants for cg image', () => {
 			const variants = getNameVariants('cg beach_sunset');
 			expect(variants).toContain('cg beach_sunset');
-			expect(variants).toContain('beach_sunset');
 			expect(variants).toContain('cg_beach_sunset');
 		});
 
 		it('should generate tag+last for three-part image', () => {
 			const variants = getNameVariants('cg ch05 sunset');
 			expect(variants).toContain('cg ch05 sunset');
-			expect(variants).toContain('ch05 sunset');
 			expect(variants).toContain('cg sunset');
-			expect(variants).toContain('sunset');
+		});
+
+		// Regression: hovering on a non-existent image like "kelly_casual soft"
+		// should not match an unrelated image like "kelly ch01 soft" via just "soft"
+		it('should NOT include last-part-only as a variant', () => {
+			const variants = getNameVariants('kelly_casual soft');
+			expect(variants).not.toContain('soft');
+		});
+
+		it('should NOT include rest-without-tag as a variant', () => {
+			const variants = getNameVariants('kelly_casual ch06 soft');
+			expect(variants).not.toContain('ch06 soft');
 		});
 	});
 

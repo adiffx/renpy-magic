@@ -512,13 +512,6 @@ function indexContent(content: string, uri: string) {
 								const tplExisting = symbolIndex.get(tagPlusLast) || [];
 								tplExisting.push(tplSymbol);
 								symbolIndex.set(tagPlusLast, tplExisting);
-
-								// Also just the last part
-								const lastPart = parts[parts.length - 1];
-								const lpSymbol: SymbolDefinition = { ...symbol, name: lastPart };
-								const lpExisting = symbolIndex.get(lastPart) || [];
-								lpExisting.push(lpSymbol);
-								symbolIndex.set(lastPart, lpExisting);
 							}
 						}
 					}
@@ -1593,9 +1586,8 @@ connection.onHover((params: TextDocumentPositionParams): Hover | null => {
 			const namesToTry = [imageName];
 			const parts = imageName.split(/\s+/);
 			if (parts.length > 1) {
-				namesToTry.push(parts.slice(1).join(' '));
+				// Try tag + last part (preserves character/CG identity)
 				namesToTry.push(parts[0] + ' ' + parts[parts.length - 1]);
-				namesToTry.push(parts[parts.length - 1]);
 			}
 			namesToTry.push(imageName.replace(/\s+/g, '_'));
 
