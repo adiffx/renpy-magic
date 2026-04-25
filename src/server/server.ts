@@ -38,6 +38,7 @@ import {
 
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { renpyDocs, getAllSymbols, getDoc, DocEntry, getEntriesByNamespace } from './renpyDocs';
+import { dottedSegmentAt } from './symbolLookup';
 import * as fs from 'fs';
 import * as path from 'path';
 import { URI } from 'vscode-uri';
@@ -1979,6 +1980,14 @@ connection.onDefinition((params: DefinitionParams): Definition | null => {
 
 	// Try different name variants
 	const namesToTry: string[] = [extendedWord, word];
+
+	// If the cursor sits inside a dotted expression like `CHAPTER_TITLES.get`,
+	// also try the segment under the cursor so attribute access on a defined
+	// symbol still resolves to the symbol itself.
+	const segment = dottedSegmentAt(extendedWord, offset - start);
+	if (segment && !namesToTry.includes(segment)) {
+		namesToTry.push(segment);
+	}
 
 	// For "show cg something", try "cg something" as the image name
 	const showMatch = line.match(/\b(show|scene|hide)\s+(.+?)(?:\s+(?:at|with|as|behind|onlayer|zorder)\b|$)/);
