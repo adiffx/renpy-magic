@@ -596,15 +596,29 @@ function scanImageFiles(rootPath: string) {
 						// e.g., images/eileen/happy.png -> "eileen happy"
 						// e.g., images/cg/beach.png -> "cg beach"
 						// e.g., images/bg room.png -> "bg room"
-						const baseName = path.basename(entry.name, ext).replace(/_/g, ' ');
+						const rawBase = path.basename(entry.name, ext);
+						const baseName = rawBase.replace(/_/g, ' ');
 						const nameParts = [...prefix, baseName];
 						const imageName = nameParts.join(' ').toLowerCase();
 						imageFilePaths.set(imageName, fullPath);
 
 						// Also index with underscores preserved
-						const nameWithUnderscores = [...prefix, path.basename(entry.name, ext)].join(' ').toLowerCase();
+						const nameWithUnderscores = [...prefix, rawBase].join(' ').toLowerCase();
 						if (nameWithUnderscores !== imageName) {
 							imageFilePaths.set(nameWithUnderscores, fullPath);
+						}
+
+						// Ren'Py auto-discovery is filename-based: a file
+						// "bar_sunset_1.jpg" anywhere under images/ becomes the
+						// image "bar_sunset_1" regardless of subdirectories.
+						// Index the basename so references like `scene bar_sunset_1` resolve.
+						const baseLower = rawBase.toLowerCase();
+						if (!imageFilePaths.has(baseLower)) {
+							imageFilePaths.set(baseLower, fullPath);
+						}
+						const baseSpacedLower = baseName.toLowerCase();
+						if (baseSpacedLower !== baseLower && !imageFilePaths.has(baseSpacedLower)) {
+							imageFilePaths.set(baseSpacedLower, fullPath);
 						}
 					}
 				}
@@ -2836,6 +2850,14 @@ async function validateDocument(textDocument: TextDocument): Promise<void> {
 			if (!found && symbolIndex.has(parts[0])) {
 				const defs = symbolIndex.get(parts[0]);
 				if (defs && defs.some(d => d.kind === 'layeredimage')) {
+					found = true;
+				}
+			}
+
+			// Check auto-discovered image files (Ren'Py resolves images from
+			// the images/ folder at runtime, even without an explicit image declaration)
+			if (!found) {
+				if (resolveImagePath(imageName)) {
 					found = true;
 				}
 			}

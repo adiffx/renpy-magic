@@ -225,6 +225,65 @@ describe('Documentation Lookup', () => {
 		});
 	});
 
+	describe('Auto-Discovered Image Indexing', () => {
+		// Mirrors the indexing logic in scanImageFiles. Ren'Py's auto-discovery
+		// resolves a `scene foo` reference to game/images/**/foo.{ext} regardless
+		// of subdirectories, so the basename must be indexed independently.
+		const path = require('path');
+
+		function indexFile(prefix: string[], filename: string): Map<string, string> {
+			const map = new Map<string, string>();
+			const ext = path.extname(filename).toLowerCase();
+			const fullPath = '/game/images/' + [...prefix, filename].join('/');
+			const rawBase = path.basename(filename, ext);
+			const baseName = rawBase.replace(/_/g, ' ');
+
+			const nameParts = [...prefix, baseName];
+			const imageName = nameParts.join(' ').toLowerCase();
+			map.set(imageName, fullPath);
+
+			const nameWithUnderscores = [...prefix, rawBase].join(' ').toLowerCase();
+			if (nameWithUnderscores !== imageName) {
+				map.set(nameWithUnderscores, fullPath);
+			}
+
+			const baseLower = rawBase.toLowerCase();
+			if (!map.has(baseLower)) {
+				map.set(baseLower, fullPath);
+			}
+			const baseSpacedLower = baseName.toLowerCase();
+			if (baseSpacedLower !== baseLower && !map.has(baseSpacedLower)) {
+				map.set(baseSpacedLower, fullPath);
+			}
+			return map;
+		}
+
+		it('indexes by filename basename for filename-based references', () => {
+			// `scene bar_sunset_1` should resolve to images/ch05/bg/bar_sunset_1.jpg
+			const map = indexFile(['ch05', 'bg'], 'bar_sunset_1.jpg');
+			expect(map.has('bar_sunset_1')).toBe(true);
+			expect(map.has('bar sunset 1')).toBe(true);
+		});
+
+		it('still indexes by full path-based name', () => {
+			const map = indexFile(['ch05', 'bg'], 'bar_sunset_1.jpg');
+			expect(map.has('ch05 bg bar sunset 1')).toBe(true);
+			expect(map.has('ch05 bg bar_sunset_1')).toBe(true);
+		});
+
+		it('indexes basename for files without underscores', () => {
+			const map = indexFile(['eileen'], 'happy.png');
+			expect(map.has('happy')).toBe(true);
+			expect(map.has('eileen happy')).toBe(true);
+		});
+
+		it('indexes basename for video files', () => {
+			const map = indexFile(['cg'], 'intro_cinematic.webm');
+			expect(map.has('intro_cinematic')).toBe(true);
+			expect(map.has('intro cinematic')).toBe(true);
+		});
+	});
+
 	describe('Game Directory Detection', () => {
 		const path = require('path');
 
