@@ -479,12 +479,18 @@ function indexContent(content: string, uri: string) {
 					existing.push(symbol);
 					symbolIndex.set(name, existing);
 
-					// For images, extract the file path from the definition
-					// Handles: image x = "path.png" and image x = Movie(play="path.webm")
+					// For images, extract the file path from the definition.
+					// Take the first quoted asset path on the right-hand side of `=`,
+					// which covers bare strings, Transform("..."), At("...", ...),
+					// Movie(play="..."), and similar wrappers.
 					if (kind === 'image') {
-						const pathMatch = line.match(/(?:=\s*|play\s*=\s*)["']([^"']+\.(?:png|jpg|jpeg|webp|mp4|webm|ogv|avi|mkv))["']/i);
-						if (pathMatch) {
-							symbol.imagePath = pathMatch[1];
+						const eqIdx = line.indexOf('=');
+						if (eqIdx >= 0) {
+							const rhs = line.substring(eqIdx + 1);
+							const pathMatch = rhs.match(/["']([^"']+\.(?:png|jpg|jpeg|webp|mp4|webm|ogv|avi|mkv))["']/i);
+							if (pathMatch) {
+								symbol.imagePath = pathMatch[1];
+							}
 						}
 					}
 

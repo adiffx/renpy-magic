@@ -153,6 +153,55 @@ describe('Symbol Extraction Patterns', () => {
 		});
 	});
 
+	describe('Image Path Extraction', () => {
+		// Mirrors the server's image-path extraction: take the first quoted
+		// asset path on the right-hand side of `=`, regardless of any wrapper
+		// (Transform, At, Movie, etc.) sitting between `=` and the string.
+		function extractImagePath(line: string): string | null {
+			const eqIdx = line.indexOf('=');
+			if (eqIdx < 0) return null;
+			const rhs = line.substring(eqIdx + 1);
+			const m = rhs.match(/["']([^"']+\.(?:png|jpg|jpeg|webp|mp4|webm|ogv|avi|mkv))["']/i);
+			return m ? m[1] : null;
+		}
+
+		it('extracts a bare quoted path', () => {
+			const line = 'image kelly_tennis ch06 embarrassed = "images/ch06/sprites/kelly_tennis/embarrassed.webp"';
+			expect(extractImagePath(line)).toBe('images/ch06/sprites/kelly_tennis/embarrassed.webp');
+		});
+
+		it('extracts the path from a Transform(...) wrapper', () => {
+			const line = 'image kelly_casual ch06 embarrassed = Transform("images/ch06/sprites/kelly_casual/embarrassed.webp", zoom=0.9, anchor=(0.5, 1.0), pos=(0.5, 1.0))';
+			expect(extractImagePath(line)).toBe('images/ch06/sprites/kelly_casual/embarrassed.webp');
+		});
+
+		it('extracts the path from an At(...) wrapper', () => {
+			const line = 'image y = At("images/y.png", auto_dissolve)';
+			expect(extractImagePath(line)).toBe('images/y.png');
+		});
+
+		it('extracts the path from Movie(play=...)', () => {
+			const line = 'image splash = Movie(play="video/foo.webm")';
+			expect(extractImagePath(line)).toBe('video/foo.webm');
+		});
+
+		it('extracts video extensions', () => {
+			const line = 'image clip = "movies/intro.mp4"';
+			expect(extractImagePath(line)).toBe('movies/intro.mp4');
+		});
+
+		it('returns null when no quoted asset path is present', () => {
+			const line = 'image dyn = DynamicDisplayable(my_callback)';
+			expect(extractImagePath(line)).toBeNull();
+		});
+
+		it('ignores non-asset string literals', () => {
+			// A string that does not look like an asset (no recognised extension)
+			const line = 'image x = SomeWidget("hello world")';
+			expect(extractImagePath(line)).toBeNull();
+		});
+	});
+
 	describe('Image Index Variants', () => {
 		// Replicates the indexing logic used by the server. For each image
 		// definition we index multiple variants for flexible matching, but
