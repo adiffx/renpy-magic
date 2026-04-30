@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.1.2] - 2026-04-26
+
+### Added
+- Native Ren'Py lint integration (runs `renpy lint` on save and on file changes, surfaces warnings as diagnostics)
+
+### Changed
+- Image auto-discovery now resolves images by filename anywhere under `images/`, matching Ren'Py's runtime behavior
+
+### Fixed
+- Image preview on hover now works for definitions wrapped in `Transform(...)`, `At(...)`, and similar single-line helpers
+- Image preview on hover now works for multi-line definitions like `ConditionSwitch(...)` where the asset paths are on continuation lines
+- Go to Definition (F12) now resolves through attribute access (e.g. F12 on `CHAPTER_TITLES` in `CHAPTER_TITLES.get(...)`)
+- Image references no longer falsely match by last attribute alone (e.g. `kelly_casual soft` no longer matches `kelly ch01 soft`)
+- Lint no longer reports a false failure when Ren'Py exits non-zero solely because warnings were emitted
+
 ## [1.1.1] - 2026-04-23
 
 ### Added
