@@ -2591,9 +2591,28 @@ function runRenpyLint(projectRoot: string): Promise<LintError[]> {
 				return;
 			}
 
-			// Check for other execution failures (no valid lint output)
-			if (error && !output.includes('File "') && !output.match(/\.rpy[mc]?:\d+/)) {
-				connection.window.showErrorMessage(`Ren'Py lint failed to run: ${error.message}`);
+			// Ren'Py's `lint --error-code` exits non-zero whenever there are
+			// any warnings, so a non-zero exit on its own doesn't mean lint
+			// failed. Only treat it as a real failure when the output looks
+			// like it didn't run a successful lint pass at all (no warnings
+			// parsed AND no statistics summary).
+			const ranSuccessfully =
+				output.includes('Statistics:') ||
+				output.includes('File "') ||
+				/\.rpy[mc]?:\d+/.test(output);
+
+			if (error && !ranSuccessfully) {
+				const trimmedOutput = output.trim();
+				connection.console.error(`Ren'Py lint failed (exit ${error.code ?? '?'}): ${error.message}`);
+				if (trimmedOutput) {
+					connection.console.error(`Ren'Py lint output:\n${trimmedOutput}`);
+				}
+				const detail = trimmedOutput
+					? trimmedOutput.split('\n').slice(-5).join('\n')
+					: error.message;
+				connection.window.showErrorMessage(
+					`Ren'Py lint failed to run. See "Ren'Py Language Support" output channel for details.\n\n${detail}`
+				);
 				resolve([]);
 				return;
 			}
