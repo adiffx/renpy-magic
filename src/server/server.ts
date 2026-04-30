@@ -482,12 +482,32 @@ function indexContent(content: string, uri: string) {
 					// For images, extract the file path from the definition.
 					// Take the first quoted asset path on the right-hand side of `=`,
 					// which covers bare strings, Transform("..."), At("...", ...),
-					// Movie(play="..."), and similar wrappers.
+					// Movie(play="..."), and ConditionSwitch(...) (which can span
+					// multiple lines, with paths on continuation lines).
 					if (kind === 'image') {
 						const eqIdx = line.indexOf('=');
 						if (eqIdx >= 0) {
-							const rhs = line.substring(eqIdx + 1);
-							const pathMatch = rhs.match(/["']([^"']+\.(?:png|jpg|jpeg|webp|mp4|webm|ogv|avi|mkv))["']/i);
+							const assetRegex = /["']([^"']+\.(?:png|jpg|jpeg|webp|mp4|webm|ogv|avi|mkv))["']/i;
+							let rhs = line.substring(eqIdx + 1);
+							let pathMatch = rhs.match(assetRegex);
+							// If the path isn't on the first line and the
+							// expression continues (unbalanced paren or
+							// trailing comma/backslash), scan forward.
+							const opensMulti = rhs.includes('(') && !rhs.match(/\)\s*$/);
+							if (!pathMatch && opensMulti) {
+								for (let j = i + 1; j < lines.length && j < i + 50; j++) {
+									rhs += '\n' + lines[j];
+									pathMatch = rhs.match(assetRegex);
+									if (pathMatch) break;
+									// Stop once the parens balance out
+									let depth = 0;
+									for (const ch of rhs) {
+										if (ch === '(') depth++;
+										else if (ch === ')') depth--;
+									}
+									if (depth <= 0) break;
+								}
+							}
 							if (pathMatch) {
 								symbol.imagePath = pathMatch[1];
 							}

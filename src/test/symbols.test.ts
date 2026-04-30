@@ -156,12 +156,33 @@ describe('Symbol Extraction Patterns', () => {
 	describe('Image Path Extraction', () => {
 		// Mirrors the server's image-path extraction: take the first quoted
 		// asset path on the right-hand side of `=`, regardless of any wrapper
-		// (Transform, At, Movie, etc.) sitting between `=` and the string.
-		function extractImagePath(line: string): string | null {
+		// (Transform, At, Movie, ConditionSwitch). When the expression spans
+		// multiple lines (e.g. ConditionSwitch(...)), continuation lines are
+		// scanned until a path is found or the parens balance.
+		const ASSET_REGEX = /["']([^"']+\.(?:png|jpg|jpeg|webp|mp4|webm|ogv|avi|mkv))["']/i;
+
+		function extractImagePath(source: string, startLine = 0): string | null {
+			const lines = source.split('\n');
+			const line = lines[startLine];
+			if (line === undefined) return null;
 			const eqIdx = line.indexOf('=');
 			if (eqIdx < 0) return null;
-			const rhs = line.substring(eqIdx + 1);
-			const m = rhs.match(/["']([^"']+\.(?:png|jpg|jpeg|webp|mp4|webm|ogv|avi|mkv))["']/i);
+			let rhs = line.substring(eqIdx + 1);
+			let m = rhs.match(ASSET_REGEX);
+			const opensMulti = rhs.includes('(') && !rhs.match(/\)\s*$/);
+			if (!m && opensMulti) {
+				for (let j = startLine + 1; j < lines.length && j < startLine + 50; j++) {
+					rhs += '\n' + lines[j];
+					m = rhs.match(ASSET_REGEX);
+					if (m) break;
+					let depth = 0;
+					for (const ch of rhs) {
+						if (ch === '(') depth++;
+						else if (ch === ')') depth--;
+					}
+					if (depth <= 0) break;
+				}
+			}
 			return m ? m[1] : null;
 		}
 
@@ -199,6 +220,30 @@ describe('Symbol Extraction Patterns', () => {
 			// A string that does not look like an asset (no recognised extension)
 			const line = 'image x = SomeWidget("hello world")';
 			expect(extractImagePath(line)).toBeNull();
+		});
+
+		it('extracts the first path from a multi-line ConditionSwitch(...)', () => {
+			const source = [
+				'image cg ch06 Kelly_LingerieChoice_02_010 = ConditionSwitch(',
+				'    "ch06_lingerie_choice == \'bold\'", "images/ch06/cg/lingerie_bold/Kelly_LingerieChoice_02_010.jpg",',
+				'    "ch06_lingerie_choice == \'cute\'", "images/ch06/cg/lingerie_cute/Kelly_LingerieChoice_02_010.jpg",',
+				'    "ch06_lingerie_choice == \'elegant\'", "images/ch06/cg/lingerie_elegant/Kelly_LingerieChoice_02_010.jpg",',
+				')',
+			].join('\n');
+			expect(extractImagePath(source)).toBe('images/ch06/cg/lingerie_bold/Kelly_LingerieChoice_02_010.jpg');
+		});
+
+		it('does not scan past the matching close paren', () => {
+			// The first definition has no asset path; scanning must stop at
+			// its closing `)` rather than picking up a path from a later
+			// unrelated definition.
+			const source = [
+				'image foo = Something(',
+				'    a, b, c,',
+				')',
+				'image bar = "images/bar.png"',
+			].join('\n');
+			expect(extractImagePath(source)).toBeNull();
 		});
 	});
 
