@@ -439,6 +439,50 @@ describe('Symbol Reference Patterns', () => {
 		});
 	});
 
+	describe('Audio References', () => {
+		const playAudioRegex = /^\s*(?:play|queue)\s+(?:music|sound|voice|audio)\s+([a-zA-Z_][a-zA-Z0-9_]*)/;
+		const audioDefRegex = /^\s*define\s+audio\.([a-zA-Z_][a-zA-Z0-9_]*)\s*=/;
+
+		it('matches play music with fadein', () => {
+			const m = '    play music comedic_awkward fadein 1.0'.match(playAudioRegex);
+			expect(m).not.toBeNull();
+			expect(m![1]).toBe('comedic_awkward');
+		});
+
+		it('matches play sound', () => {
+			const m = '    play sound nine_lives fadein 0.3'.match(playAudioRegex);
+			expect(m).not.toBeNull();
+			expect(m![1]).toBe('nine_lives');
+		});
+
+		it('matches play voice and play audio', () => {
+			expect('play voice line_01'.match(playAudioRegex)![1]).toBe('line_01');
+			expect('play audio whatever'.match(playAudioRegex)![1]).toBe('whatever');
+		});
+
+		it('matches queue (same syntax as play)', () => {
+			const m = '    queue music theme_dreamy'.match(playAudioRegex);
+			expect(m).not.toBeNull();
+			expect(m![1]).toBe('theme_dreamy');
+		});
+
+		it('does not match unrelated lines', () => {
+			expect('show eileen happy'.match(playAudioRegex)).toBeNull();
+			expect('play screen phone'.match(playAudioRegex)).toBeNull();
+		});
+
+		it('captures the name from a define audio.<name> line', () => {
+			const m = 'define audio.comedic_awkward = "assets/audio/bgm/comedic_awkward.ogg"'.match(audioDefRegex);
+			expect(m).not.toBeNull();
+			expect(m![1]).toBe('comedic_awkward');
+		});
+
+		it('does not match define on non-audio dotted names', () => {
+			expect('define config.name = "My Game"'.match(audioDefRegex)).toBeNull();
+			expect('define gui.text_color = "#fff"'.match(audioDefRegex)).toBeNull();
+		});
+	});
+
 	describe('Show Screen Detection', () => {
 		const showScreenCheck = /^\s*show\s+screen\s/;
 		const showImageRegex = /^\s*(show|scene)\s+([a-zA-Z_][a-zA-Z0-9_ ]+?)(?:\s+(?:at|with|as|behind|onlayer|zorder)\b|$)/;

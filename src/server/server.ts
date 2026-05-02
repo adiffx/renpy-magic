@@ -39,6 +39,7 @@ import {
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { renpyDocs, getAllSymbols, getDoc, DocEntry, getEntriesByNamespace } from './renpyDocs';
 import { dottedSegmentAt } from './symbolLookup';
+import { extractAssetPath, IMAGE_EXTENSIONS, AUDIO_EXTENSIONS } from './assetPath';
 import * as fs from 'fs';
 import * as path from 'path';
 import { URI } from 'vscode-uri';
@@ -480,37 +481,12 @@ function indexContent(content: string, uri: string) {
 					symbolIndex.set(name, existing);
 
 					// For images, extract the file path from the definition.
-					// Take the first quoted asset path on the right-hand side of `=`,
-					// which covers bare strings, Transform("..."), At("...", ...),
-					// Movie(play="..."), and ConditionSwitch(...) (which can span
-					// multiple lines, with paths on continuation lines).
+					// Covers bare strings, Transform/At/Movie wrappers, and
+					// multi-line ConditionSwitch with paths on continuation lines.
 					if (kind === 'image') {
-						const eqIdx = line.indexOf('=');
-						if (eqIdx >= 0) {
-							const assetRegex = /["']([^"']+\.(?:png|jpg|jpeg|webp|mp4|webm|ogv|avi|mkv))["']/i;
-							let rhs = line.substring(eqIdx + 1);
-							let pathMatch = rhs.match(assetRegex);
-							// If the path isn't on the first line and the
-							// expression continues (unbalanced paren or
-							// trailing comma/backslash), scan forward.
-							const opensMulti = rhs.includes('(') && !rhs.match(/\)\s*$/);
-							if (!pathMatch && opensMulti) {
-								for (let j = i + 1; j < lines.length && j < i + 50; j++) {
-									rhs += '\n' + lines[j];
-									pathMatch = rhs.match(assetRegex);
-									if (pathMatch) break;
-									// Stop once the parens balance out
-									let depth = 0;
-									for (const ch of rhs) {
-										if (ch === '(') depth++;
-										else if (ch === ')') depth--;
-									}
-									if (depth <= 0) break;
-								}
-							}
-							if (pathMatch) {
-								symbol.imagePath = pathMatch[1];
-							}
+						const assetPath = extractAssetPath(lines, i, IMAGE_EXTENSIONS);
+						if (assetPath) {
+							symbol.imagePath = assetPath;
 						}
 					}
 
@@ -600,7 +576,7 @@ function isVideoFile(filePath: string): boolean {
 function getImageHoverContent(imageName: string, filePath: string): string {
 	const fileUri = URI.file(filePath).toString();
 	if (isVideoFile(filePath)) {
-		return `${path.basename(filePath)} (video)`;
+		return getMediaHoverContent(imageName, filePath, 'video');
 	}
 	return `![${imageName}](${fileUri}|${getImageSizeParam(filePath)})`;
 }
@@ -730,6 +706,58 @@ function resolveImagePath(imageName: string): string | null {
 	}
 
 	return null;
+}
+
+// Resolve `audio.<name>` (or a bare audio name) to an on-disk file path by
+// reading the audio define site and extracting its quoted path.
+function resolveAudioPath(audioName: string): string | null {
+	const candidates = [`audio.${audioName}`, audioName];
+	for (const key of candidates) {
+		const defs = symbolIndex.get(key);
+		if (!defs) continue;
+		for (const def of defs) {
+			if (def.kind !== 'define') continue;
+			const defFilePath = URI.parse(def.uri).fsPath;
+			let source: string;
+			try {
+				source = fs.readFileSync(defFilePath, 'utf-8');
+			} catch {
+				continue;
+			}
+			const fileLines = source.split('\n');
+			const assetPath = extractAssetPath(fileLines, def.line, AUDIO_EXTENSIONS);
+			if (!assetPath) continue;
+			const gameDir = findGameDir(defFilePath);
+			if (!gameDir) continue;
+			const candidate = path.join(gameDir, assetPath);
+			if (fs.existsSync(candidate)) return candidate;
+		}
+	}
+	return null;
+}
+
+// Build a Markdown hover for an audio or video file: name, basename, size,
+// and a "Play" link. Audio uses VS Code's built-in media viewer (which
+// handles common formats fine). Video uses the OS default app via the
+// renpy.openExternal command, since VS Code's viewer can't decode WebM
+// and other Ren'Py-friendly formats.
+function getMediaHoverContent(displayName: string, filePath: string, kind: 'audio' | 'video'): string {
+	const fileUri = URI.file(filePath).toString();
+	const basename = path.basename(filePath);
+	let sizeStr = '';
+	try {
+		const bytes = fs.statSync(filePath).size;
+		const mb = bytes / (1024 * 1024);
+		sizeStr = mb >= 1 ? `${mb.toFixed(1)} MB` : `${(bytes / 1024).toFixed(0)} KB`;
+	} catch {
+		// ignore
+	}
+	const meta = sizeStr ? `${basename} · ${sizeStr}` : basename;
+	const linkTarget = kind === 'audio'
+		? fileUri
+		: `command:renpy.openExternal?${encodeURIComponent(JSON.stringify(fileUri))}`;
+	const label = kind === 'audio' ? '▶ Play audio' : '▶ Play video in default app';
+	return `**${displayName}** (${kind})\n\n${meta}\n\n[${label}](${linkTarget})`;
 }
 
 // Get word at position
@@ -1656,6 +1684,45 @@ connection.onHover((params: TextDocumentPositionParams): Hover | null => {
 				contents: {
 					kind: MarkupKind.Markdown,
 					value: getImageHoverContent(imageName, imgPath)
+				}
+			};
+		}
+	}
+
+	// The cursor's "word" may include dots (e.g. "audio.foo"); for matching
+	// against simple identifiers we also want the dot-separated segment
+	// under the cursor.
+	const cursorOffset = document.offsetAt(params.position);
+	let wordStart = cursorOffset;
+	while (wordStart > 0 && /[a-zA-Z0-9_.]/.test(text[wordStart - 1])) wordStart--;
+	const segment = dottedSegmentAt(word, cursorOffset - wordStart) || word;
+
+	// Audio preview on `play music|sound|voice|audio <name>` lines, plus
+	// `queue` (same syntax as `play`). Triggered when the cursor is on the
+	// audio name itself.
+	const playMatch = line.match(/^\s*(?:play|queue)\s+(?:music|sound|voice|audio)\s+([a-zA-Z_][a-zA-Z0-9_]*)/);
+	if (playMatch && playMatch[1] === segment) {
+		const audioPath = resolveAudioPath(segment);
+		if (audioPath) {
+			return {
+				contents: {
+					kind: MarkupKind.Markdown,
+					value: getMediaHoverContent(segment, audioPath, 'audio')
+				}
+			};
+		}
+	}
+
+	// Audio preview on `define audio.<name> = "path"` lines, when the
+	// cursor is on the `<name>` part.
+	const audioDefMatch = line.match(/^\s*define\s+audio\.([a-zA-Z_][a-zA-Z0-9_]*)\s*=/);
+	if (audioDefMatch && audioDefMatch[1] === segment) {
+		const audioPath = resolveAudioPath(segment);
+		if (audioPath) {
+			return {
+				contents: {
+					kind: MarkupKind.Markdown,
+					value: getMediaHoverContent(segment, audioPath, 'audio')
 				}
 			};
 		}
