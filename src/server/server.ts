@@ -581,47 +581,60 @@ function getImageHoverContent(imageName: string, filePath: string): string {
 	return `![${imageName}](${fileUri}|${getImageSizeParam(filePath)})`;
 }
 
-// Scan for image files in the workspace (Ren'Py auto-discovers images in images/ folder)
+// Scan for image files in the workspace.
+//
+// Ren'Py's runtime auto-discovers images by walking the entire `game/`
+// directory and indexing files by basename. The conventional `images/`
+// subtree additionally yields dotted image names from the directory
+// structure (e.g. `images/eileen/happy.png` → image "eileen happy").
+// We mirror both: scan all of `game/` for basename lookup, and build the
+// prefix-based dotted names only for files inside `game/images/`.
+const SCAN_SKIP_DIRS = new Set(['saves', 'cache', 'tl', 'bytecode', '__pycache__']);
+
 function scanImageFiles(rootPath: string) {
 	imageFilePaths.clear();
 
-	function scanDir(dirPath: string, prefix: string[]) {
+	function scanDir(dirPath: string, prefix: string[] | null) {
 		try {
 			const entries = fs.readdirSync(dirPath, { withFileTypes: true });
 			for (const entry of entries) {
 				const fullPath = path.join(dirPath, entry.name);
-				if (entry.isDirectory() && !entry.name.startsWith('.')) {
-					scanDir(fullPath, [...prefix, entry.name]);
+				if (entry.isDirectory()) {
+					if (entry.name.startsWith('.')) continue;
+					if (SCAN_SKIP_DIRS.has(entry.name)) continue;
+					// Once inside `images/`, accumulate the prefix; otherwise
+					// keep prefix=null so we only register basenames.
+					const nextPrefix = prefix !== null
+						? [...prefix, entry.name]
+						: (entry.name === 'images' ? [] : null);
+					scanDir(fullPath, nextPrefix);
 				} else if (entry.isFile()) {
 					const ext = path.extname(entry.name).toLowerCase();
-					if (imageExtensions.has(ext) || videoExtensions.has(ext)) {
-						// Build the image name from directory structure + filename
-						// e.g., images/eileen/happy.png -> "eileen happy"
-						// e.g., images/cg/beach.png -> "cg beach"
-						// e.g., images/bg room.png -> "bg room"
-						const rawBase = path.basename(entry.name, ext);
-						const baseName = rawBase.replace(/_/g, ' ');
+					if (!imageExtensions.has(ext) && !videoExtensions.has(ext)) continue;
+
+					const rawBase = path.basename(entry.name, ext);
+					const baseName = rawBase.replace(/_/g, ' ');
+
+					// Always register by basename (matches Ren'Py runtime
+					// auto-discovery anywhere under `game/`).
+					const baseLower = rawBase.toLowerCase();
+					if (!imageFilePaths.has(baseLower)) {
+						imageFilePaths.set(baseLower, fullPath);
+					}
+					const baseSpacedLower = baseName.toLowerCase();
+					if (baseSpacedLower !== baseLower && !imageFilePaths.has(baseSpacedLower)) {
+						imageFilePaths.set(baseSpacedLower, fullPath);
+					}
+
+					// Inside `images/`, also build the dotted-prefix names.
+					if (prefix !== null) {
 						const nameParts = [...prefix, baseName];
 						const imageName = nameParts.join(' ').toLowerCase();
 						imageFilePaths.set(imageName, fullPath);
 
-						// Also index with underscores preserved
 						const nameWithUnderscores = [...prefix, rawBase].join(' ').toLowerCase();
 						if (nameWithUnderscores !== imageName) {
 							imageFilePaths.set(nameWithUnderscores, fullPath);
-						}
-
-						// Ren'Py auto-discovery is filename-based: a file
-						// "bar_sunset_1.jpg" anywhere under images/ becomes the
-						// image "bar_sunset_1" regardless of subdirectories.
-						// Index the basename so references like `scene bar_sunset_1` resolve.
-						const baseLower = rawBase.toLowerCase();
-						if (!imageFilePaths.has(baseLower)) {
-							imageFilePaths.set(baseLower, fullPath);
-						}
-						const baseSpacedLower = baseName.toLowerCase();
-						if (baseSpacedLower !== baseLower && !imageFilePaths.has(baseSpacedLower)) {
-							imageFilePaths.set(baseSpacedLower, fullPath);
 						}
 					}
 				}
@@ -631,7 +644,7 @@ function scanImageFiles(rootPath: string) {
 		}
 	}
 
-	// Find game/images directories by looking at indexed .rpy file locations
+	// Find `game/` directories by looking at indexed .rpy file locations.
 	const gameDirs = new Set<string>();
 	for (const [, defs] of symbolIndex) {
 		for (const def of defs) {
@@ -640,20 +653,18 @@ function scanImageFiles(rootPath: string) {
 		}
 	}
 
-	// Scan images/ inside each game dir
+	// Scan each game/ dir recursively. Pass prefix=null at the root so the
+	// dotted-prefix keys are only built once we descend into `images/`.
 	for (const gd of gameDirs) {
-		const imagesPath = path.join(gd, 'images');
-		if (fs.existsSync(imagesPath)) {
-			scanDir(imagesPath, []);
-		}
+		scanDir(gd, null);
 	}
 
-	// Also try workspace-relative paths
-	const imagesDirs = ['images', 'game/images'];
-	for (const dir of imagesDirs) {
-		const imagesPath = path.join(rootPath, dir);
-		if (fs.existsSync(imagesPath)) {
-			scanDir(imagesPath, []);
+	// Workspace-relative fallbacks (when no .rpy is indexed yet).
+	const fallbackRoots = [path.join(rootPath, 'game'), rootPath];
+	for (const root of fallbackRoots) {
+		if (gameDirs.has(root)) continue;
+		if (fs.existsSync(root)) {
+			scanDir(root, null);
 		}
 	}
 }
