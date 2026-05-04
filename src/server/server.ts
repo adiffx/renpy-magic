@@ -38,7 +38,7 @@ import {
 
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { renpyDocs, getAllSymbols, getDoc, DocEntry, getEntriesByNamespace } from './renpyDocs';
-import { dottedSegmentAt } from './symbolLookup';
+import { dottedSegmentAt, imageAttributesForTag } from './symbolLookup';
 import { extractAssetPath, IMAGE_EXTENSIONS, AUDIO_EXTENSIONS } from './assetPath';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -1749,9 +1749,13 @@ connection.onCompletion((params): CompletionItem[] => {
 
 	const lineContext = getLineContext(document, params.position);
 
-	// If triggered by space, only show completions for specific contexts (jump/call)
+	// If triggered by space, only show completions for specific contexts:
+	// - `jump|call ` for label completion
+	// - `show|scene|hide <tag> ...` for image attribute completion
 	if (params.context?.triggerCharacter === ' ') {
-		if (!lineContext.match(/\b(jump|call)\s+$/)) {
+		const isJumpCall = lineContext.match(/\b(jump|call)\s+$/);
+		const isShowAttr = lineContext.match(/\b(show|scene|hide)\s+[a-zA-Z_][a-zA-Z0-9_]*(?:\s+[a-zA-Z_][a-zA-Z0-9_]*)*\s+$/);
+		if (!isJumpCall && !isShowAttr) {
 			return [];
 		}
 	}
@@ -1934,6 +1938,30 @@ connection.onCompletion((params): CompletionItem[] => {
 				data: 6000 + index
 			});
 		});
+	}
+
+	// After `show|scene|hide <tag> [attr ...] ` suggest the remaining
+	// image attributes for that tag (e.g. `show kelly_casual ` →
+	// `smile, teasing, focussed, ...`). Skip when the tag is `screen`,
+	// which is handled separately below.
+	const showAttrMatch = lineContext.match(/\b(show|scene|hide)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s+((?:[a-zA-Z_][a-zA-Z0-9_]*\s+)*)([a-zA-Z_]\w*)?$/);
+	if (showAttrMatch && showAttrMatch[2] !== 'screen') {
+		const tag = showAttrMatch[2];
+		const usedAttrs = (showAttrMatch[3] || '').trim().split(/\s+/).filter(Boolean);
+		const imageNames: string[] = [];
+		for (const [name, defs] of symbolIndex) {
+			if (defs.some(d => d.kind === 'image')) imageNames.push(name);
+		}
+		const attrs = imageAttributesForTag(imageNames, tag, usedAttrs);
+		if (attrs.length > 0) {
+			return attrs.map((attr, index) => ({
+				label: attr,
+				kind: CompletionItemKind.Value,
+				detail: `image attribute (${tag})`,
+				sortText: '0' + attr,
+				data: 13000 + index
+			}));
+		}
 	}
 
 	// After "call screen" or "show screen", suggest screens (check this BEFORE jump/call)

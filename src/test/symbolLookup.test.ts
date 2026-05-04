@@ -1,4 +1,4 @@
-import { dottedSegmentAt } from '../server/symbolLookup';
+import { dottedSegmentAt, imageAttributesForTag } from '../server/symbolLookup';
 
 describe('dottedSegmentAt', () => {
 	it('returns null for non-dotted expressions', () => {
@@ -46,5 +46,53 @@ describe('dottedSegmentAt', () => {
 	it('returns null for empty segments', () => {
 		// Cursor sits on the dot in ".get" — the leading segment is empty
 		expect(dottedSegmentAt('.get', 0)).toBeNull();
+	});
+});
+
+describe('imageAttributesForTag', () => {
+	it('returns the deduped attributes for a tag', () => {
+		const names = [
+			'kelly_casual ch06 smile',
+			'kelly_casual ch06 teasing',
+			'kelly_casual ch06 focussed',
+			'eileen happy',
+		];
+		const attrs = imageAttributesForTag(names, 'kelly_casual');
+		expect(attrs).toContain('smile');
+		expect(attrs).toContain('teasing');
+		expect(attrs).toContain('focussed');
+		expect(attrs).toContain('ch06');
+		// Each attribute appears once even though `ch06` is in three images
+		expect(attrs.filter(a => a === 'ch06')).toHaveLength(1);
+		// Attributes from the `eileen` tag are not included
+		expect(attrs).not.toContain('happy');
+	});
+
+	it('returns an empty list for an unknown tag', () => {
+		const names = ['kelly_casual ch06 smile'];
+		expect(imageAttributesForTag(names, 'unknown_tag')).toEqual([]);
+	});
+
+	it('skips entries that are tag-only (no attributes)', () => {
+		const names = ['kelly_casual', 'kelly_casual ch06 smile'];
+		const attrs = imageAttributesForTag(names, 'kelly_casual');
+		expect(attrs).toEqual(['ch06', 'smile']);
+	});
+
+	it('handles two-part images (no chapter prefix)', () => {
+		const names = ['eileen happy', 'eileen sad', 'eileen angry'];
+		const attrs = imageAttributesForTag(names, 'eileen');
+		expect(attrs.sort()).toEqual(['angry', 'happy', 'sad']);
+	});
+
+	it('excludes attributes already used on the line', () => {
+		const names = [
+			'kelly_casual ch06 smile',
+			'kelly_casual ch06 teasing',
+		];
+		const attrs = imageAttributesForTag(names, 'kelly_casual', ['ch06']);
+		expect(attrs).not.toContain('ch06');
+		expect(attrs).toContain('smile');
+		expect(attrs).toContain('teasing');
 	});
 });
