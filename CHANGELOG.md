@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.1.3] - 2026-05-04
+
+### Added
+- Hover preview with a "Play" link for audio files on `play music|sound|voice|audio <name>` and `queue ...` statements, and on `define audio.<name> = "..."` lines (opens in VS Code's built-in player)
+- Hover preview with an "Open in default app" link for video files (opens in the OS's default video player, since VS Code's built-in viewer can't decode WebM)
+- Completion suggestions for image attributes after `show|scene|hide <tag>` (e.g. `show kelly_casual ` now suggests `smile`, `teasing`, `focussed`, etc.)
+
+### Changed
+- Image auto-discovery now scans all of `game/` (not just `game/images/`), so backgrounds and CGs stored under custom directories like `game/assets/` are resolved
+
 ## [1.1.2] - 2026-04-26
 
 ### Added

@@ -56,6 +56,16 @@ Image preview on hover — hover over `show` or `scene` statements to see a prev
 
 <img src="./images/screenshots/ImageHoverSprite.png" width="249" />
 
+#### Audio & video preview
+
+Hover over `play music|sound|voice|audio <name>` (or `queue ...`) statements, or over the `<name>` part of a `define audio.<name> = "..."` line, to see the resolved file with a play link. Audio opens in VS Code's built-in player; video opens in the OS's default app, since VS Code's viewer can't decode WebM and other Ren'Py-friendly formats.
+
+<img src="./images/screenshots/AudioHover.png" width="299" />
+
+&nbsp;
+
+<img src="./images/screenshots/VideoHover.png" width="392" />
+
 ### 🔎 Navigation & Code Intelligence
 
 #### Go to Symbol (`Cmd+Shift+O` / `Ctrl+Shift+O`)
