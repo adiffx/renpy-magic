@@ -1,4 +1,4 @@
-import { dottedSegmentAt, imageAttributesForTag } from '../server/symbolLookup';
+import { dottedSegmentAt, imageAttributesForTag, imageTags } from '../server/symbolLookup';
 
 describe('dottedSegmentAt', () => {
 	it('returns null for non-dotted expressions', () => {
@@ -94,5 +94,35 @@ describe('imageAttributesForTag', () => {
 		expect(attrs).not.toContain('ch06');
 		expect(attrs).toContain('smile');
 		expect(attrs).toContain('teasing');
+	});
+});
+
+describe('imageTags', () => {
+	it('returns the deduped first-word of each image name', () => {
+		const names = [
+			'kelly_casual ch06 smile',
+			'kelly_casual ch06 teasing',
+			'kelly_tennis ch06 smile',
+			'eileen happy',
+			'bg ch01 hallway',
+			'cg ch01 almost_kiss',
+		];
+		const tags = imageTags(names);
+		expect(tags.sort()).toEqual(['bg', 'cg', 'eileen', 'kelly_casual', 'kelly_tennis']);
+	});
+
+	it('includes single-word names (no attribute)', () => {
+		const names = ['vignette', 'black'];
+		expect(imageTags(names).sort()).toEqual(['black', 'vignette']);
+	});
+
+	it('returns an empty list for no images', () => {
+		expect(imageTags([])).toEqual([]);
+	});
+
+	it('preserves first-seen order', () => {
+		const names = ['cg ch01 a', 'bg ch01 b', 'cg ch02 c'];
+		// `cg` first because that's the first name we see, then `bg`.
+		expect(imageTags(names)).toEqual(['cg', 'bg']);
 	});
 });

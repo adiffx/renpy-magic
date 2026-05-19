@@ -1,4 +1,21 @@
 // Given a list of full image names (e.g. ["kelly_casual ch06 smile",
+// "eileen happy", "bg ch01 hallway"]) return the deduped set of image
+// tags (the first word of each name). Used for completion of the first
+// token after `show|scene|hide `. Single-word names are also included
+// since they may be used standalone (e.g. `show vignette`).
+export function imageTags(imageNames: Iterable<string>): string[] {
+	const seen = new Set<string>();
+	const out: string[] = [];
+	for (const name of imageNames) {
+		const tag = name.split(/\s+/)[0];
+		if (!tag || seen.has(tag)) continue;
+		seen.add(tag);
+		out.push(tag);
+	}
+	return out;
+}
+
+// Given a list of full image names (e.g. ["kelly_casual ch06 smile",
 // "kelly_casual ch06 teasing", "eileen happy"]) and a tag, return the
 // deduped attributes that appear after that tag. Used for completion
 // after `show <tag> ` and similar. Already-used attributes (passed as

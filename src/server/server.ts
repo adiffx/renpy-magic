@@ -38,7 +38,7 @@ import {
 
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { renpyDocs, getAllSymbols, getDoc, DocEntry, getEntriesByNamespace } from './renpyDocs';
-import { dottedSegmentAt, imageAttributesForTag } from './symbolLookup';
+import { dottedSegmentAt, imageAttributesForTag, imageTags } from './symbolLookup';
 import { extractAssetPath, IMAGE_EXTENSIONS, AUDIO_EXTENSIONS } from './assetPath';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -125,6 +125,15 @@ const atlKeywords = [
 	'function', 'event', 'on', 'animation', 'warp',
 	'clockwise', 'counterclockwise', 'circles', 'knot'
 ];
+
+// Built-in position transforms (used with "at" on show/scene)
+const builtinPositionTransforms = [
+	'left', 'right', 'center', 'truecenter', 'top', 'topleft', 'topright',
+	'offscreenleft', 'offscreenright', 'reset'
+];
+
+// Built-in layer names (used with "onlayer" on show/scene)
+const builtinLayers = ['master', 'transient', 'screens', 'overlay', 'front'];
 
 // Pre-defined transitions (lowercase, used with "with")
 const builtinTransitions = [
@@ -1751,11 +1760,12 @@ connection.onCompletion((params): CompletionItem[] => {
 
 	// If triggered by space, only show completions for specific contexts:
 	// - `jump|call ` for label completion
-	// - `show|scene|hide <tag> ...` for image attribute completion
+	// - `show|scene|hide ` (and any number of further tokens) for image
+	//   tag/attribute/clause-keyword completion
 	if (params.context?.triggerCharacter === ' ') {
 		const isJumpCall = lineContext.match(/\b(jump|call)\s+$/);
-		const isShowAttr = lineContext.match(/\b(show|scene|hide)\s+[a-zA-Z_][a-zA-Z0-9_]*(?:\s+[a-zA-Z_][a-zA-Z0-9_]*)*\s+$/);
-		if (!isJumpCall && !isShowAttr) {
+		const isShowContext = lineContext.match(/\b(show|scene|hide)\s+(?:[a-zA-Z_][a-zA-Z0-9_]*\s+)*$/);
+		if (!isJumpCall && !isShowContext) {
 			return [];
 		}
 	}
@@ -1927,6 +1937,65 @@ connection.onCompletion((params): CompletionItem[] => {
 		});
 	}
 
+	// On a `show|scene|hide` line, after `at <partial>` suggest transforms
+	// (user-defined plus built-in position transforms).
+	const atOnShowMatch = lineContext.match(/^\s*(show|scene|hide)\b.*\bat\s+([a-zA-Z_]\w*)?$/);
+	if (atOnShowMatch) {
+		const transformItems: CompletionItem[] = [];
+		builtinPositionTransforms.forEach((t, index) => {
+			transformItems.push({
+				label: t,
+				kind: CompletionItemKind.Constant,
+				detail: 'built-in position',
+				sortText: '0' + t,
+				data: 15000 + index
+			});
+		});
+		for (const [name, defs] of symbolIndex) {
+			if (defs.some(d => d.kind === 'transform')) {
+				transformItems.push({
+					label: name,
+					kind: CompletionItemKind.Constant,
+					detail: 'transform',
+					sortText: '1' + name,
+					data: 15500
+				});
+			}
+		}
+		return transformItems;
+	}
+
+	// On a `show|scene|hide` line, after `behind <partial>` suggest image tags.
+	const behindOnShowMatch = lineContext.match(/^\s*(show|scene|hide)\b.*\bbehind\s+([a-zA-Z_]\w*)?$/);
+	if (behindOnShowMatch) {
+		const imageNames: string[] = [];
+		for (const [name, defs] of symbolIndex) {
+			if (defs.some(d => d.kind === 'image')) imageNames.push(name);
+		}
+		const tags = imageTags(imageNames);
+		if (tags.length > 0) {
+			return tags.map((tag, index) => ({
+				label: tag,
+				kind: CompletionItemKind.Value,
+				detail: 'image tag',
+				sortText: '0' + tag,
+				data: 16000 + index
+			}));
+		}
+	}
+
+	// On a `show|scene|hide` line, after `onlayer <partial>` suggest layer names.
+	const onlayerMatch = lineContext.match(/^\s*(show|scene|hide)\b.*\bonlayer\s+([a-zA-Z_]\w*)?$/);
+	if (onlayerMatch) {
+		return builtinLayers.map((layer, index) => ({
+			label: layer,
+			kind: CompletionItemKind.Constant,
+			detail: 'layer',
+			sortText: '0' + layer,
+			data: 17000 + index
+		}));
+	}
+
 	// After "with" keyword, prioritize built-in transitions
 	if (lineContext.match(/\bwith\s+\w*$/)) {
 		builtinTransitions.forEach((trans, index) => {
@@ -1940,12 +2009,44 @@ connection.onCompletion((params): CompletionItem[] => {
 		});
 	}
 
+	// After `show|scene|hide ` (first token), suggest image tags from the
+	// project (`bg`, `cg`, `eileen`, etc.) plus `screen` for `show screen`.
+	const showTagMatch = lineContext.match(/\b(show|scene|hide)\s+([a-zA-Z_]\w*)?$/);
+	if (showTagMatch) {
+		const imageNames: string[] = [];
+		for (const [name, defs] of symbolIndex) {
+			if (defs.some(d => d.kind === 'image')) imageNames.push(name);
+		}
+		const tags = imageTags(imageNames);
+		const tagItems: CompletionItem[] = tags.map((tag, index) => ({
+			label: tag,
+			kind: CompletionItemKind.Value,
+			detail: 'image tag',
+			sortText: '0' + tag,
+			data: 14000 + index
+		}));
+		// `show screen` is its own thing — surface it here too.
+		if (showTagMatch[1] === 'show') {
+			tagItems.push({
+				label: 'screen',
+				kind: CompletionItemKind.Keyword,
+				detail: 'show a screen',
+				sortText: '0screen',
+				data: 14999
+			});
+		}
+		if (tagItems.length > 0) return tagItems;
+	}
+
 	// After `show|scene|hide <tag> [attr ...] ` suggest the remaining
-	// image attributes for that tag (e.g. `show kelly_casual ` →
-	// `smile, teasing, focussed, ...`). Skip when the tag is `screen`,
-	// which is handled separately below.
+	// image attributes for that tag plus the clause keywords (`at`,
+	// `with`, `as`, `behind`, `onlayer`, `zorder`). Skip when the tag is
+	// `screen`, which is handled separately below.
 	const showAttrMatch = lineContext.match(/\b(show|scene|hide)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s+((?:[a-zA-Z_][a-zA-Z0-9_]*\s+)*)([a-zA-Z_]\w*)?$/);
-	if (showAttrMatch && showAttrMatch[2] !== 'screen') {
+	const SHOW_CLAUSE_KEYWORDS = new Set(['at', 'with', 'as', 'behind', 'onlayer', 'zorder']);
+	const hasClauseKeyword = showAttrMatch && (showAttrMatch[3] || '')
+		.trim().split(/\s+/).some(t => SHOW_CLAUSE_KEYWORDS.has(t));
+	if (showAttrMatch && showAttrMatch[2] !== 'screen' && !hasClauseKeyword) {
 		const tag = showAttrMatch[2];
 		const usedAttrs = (showAttrMatch[3] || '').trim().split(/\s+/).filter(Boolean);
 		const imageNames: string[] = [];
@@ -1953,15 +2054,38 @@ connection.onCompletion((params): CompletionItem[] => {
 			if (defs.some(d => d.kind === 'image')) imageNames.push(name);
 		}
 		const attrs = imageAttributesForTag(imageNames, tag, usedAttrs);
-		if (attrs.length > 0) {
-			return attrs.map((attr, index) => ({
-				label: attr,
-				kind: CompletionItemKind.Value,
-				detail: `image attribute (${tag})`,
-				sortText: '0' + attr,
-				data: 13000 + index
-			}));
+
+		const out: CompletionItem[] = attrs.map((attr, index) => ({
+			label: attr,
+			kind: CompletionItemKind.Value,
+			detail: `image attribute (${tag})`,
+			sortText: '0' + attr,
+			data: 13000 + index
+		}));
+
+		// Once at least one attribute has been entered, also offer the
+		// clause keywords as continuation options.
+		if (usedAttrs.length > 0) {
+			const clauseKeywords: Array<{ label: string; detail: string }> = [
+				{ label: 'at', detail: 'apply transform' },
+				{ label: 'with', detail: 'transition' },
+				{ label: 'as', detail: 'alternate tag name' },
+				{ label: 'behind', detail: 'show behind tag' },
+				{ label: 'onlayer', detail: 'show on layer' },
+				{ label: 'zorder', detail: 'z-ordering' }
+			];
+			clauseKeywords.forEach((kw, index) => {
+				out.push({
+					label: kw.label,
+					kind: CompletionItemKind.Keyword,
+					detail: kw.detail,
+					sortText: '1' + kw.label,
+					data: 13500 + index
+				});
+			});
 		}
+
+		if (out.length > 0) return out;
 	}
 
 	// After "call screen" or "show screen", suggest screens (check this BEFORE jump/call)

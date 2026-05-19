@@ -483,6 +483,50 @@ describe('Symbol Reference Patterns', () => {
 		});
 	});
 
+	describe('Show Line Clause Detection', () => {
+		// Regexes from the completion handler. Each fires when the cursor is
+		// on the token immediately following the clause keyword on a
+		// show/scene/hide line.
+		const atOnShowRegex = /^\s*(show|scene|hide)\b.*\bat\s+([a-zA-Z_]\w*)?$/;
+		const behindOnShowRegex = /^\s*(show|scene|hide)\b.*\bbehind\s+([a-zA-Z_]\w*)?$/;
+		const onlayerRegex = /^\s*(show|scene|hide)\b.*\bonlayer\s+([a-zA-Z_]\w*)?$/;
+
+		it('detects `at` on a show line with no partial yet', () => {
+			expect('    show danescu assessing at '.match(atOnShowRegex)).not.toBeNull();
+		});
+
+		it('detects `at` on a show line with a partial', () => {
+			const m = '    show kelly_casual smile at rig'.match(atOnShowRegex);
+			expect(m).not.toBeNull();
+			expect(m![2]).toBe('rig');
+		});
+
+		it('detects `at` on scene/hide lines too', () => {
+			expect('    scene bg ch01 at left'.match(atOnShowRegex)).not.toBeNull();
+			expect('    hide kelly at right'.match(atOnShowRegex)).not.toBeNull();
+		});
+
+		it('does not fire `at` on non-show lines', () => {
+			expect('    play music foo at 2.0'.match(atOnShowRegex)).toBeNull();
+			expect('    label start:'.match(atOnShowRegex)).toBeNull();
+		});
+
+		it('detects `behind` on a show line', () => {
+			const m = '    show kelly happy behind '.match(behindOnShowRegex);
+			expect(m).not.toBeNull();
+		});
+
+		it('detects `onlayer` on a show line', () => {
+			const m = '    show kelly happy onlayer mast'.match(onlayerRegex);
+			expect(m).not.toBeNull();
+			expect(m![2]).toBe('mast');
+		});
+
+		it('does not match `onlayer` on lines without show', () => {
+			expect('label onlayer:'.match(onlayerRegex)).toBeNull();
+		});
+	});
+
 	describe('Show Screen Detection', () => {
 		const showScreenCheck = /^\s*show\s+screen\s/;
 		const showImageRegex = /^\s*(show|scene)\s+([a-zA-Z_][a-zA-Z0-9_ ]+?)(?:\s+(?:at|with|as|behind|onlayer|zorder)\b|$)/;
