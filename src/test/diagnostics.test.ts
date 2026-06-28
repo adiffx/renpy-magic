@@ -161,6 +161,33 @@ describe('Jump/Call Pattern Matching', () => {
 		expect(match![2]).toBe('screen');
 		// This is why we need negative lookahead in completions
 	});
+
+	describe('call/jump expression detection', () => {
+		// `call expression <expr>` and `jump expression <expr>` evaluate a
+		// Python expression at runtime — `expression` is a keyword, not a
+		// label, so the undefined-label diagnostic must skip these lines.
+		const callExpressionRegex = /^\s*(jump|call)\s+expression\b/;
+
+		it('matches `call expression _item["label"]`', () => {
+			const m = '    call expression _item["label"]'.match(callExpressionRegex);
+			expect(m).not.toBeNull();
+			expect(m![1]).toBe('call');
+		});
+
+		it('matches `jump expression target`', () => {
+			expect('    jump expression target'.match(callExpressionRegex)).not.toBeNull();
+		});
+
+		it('does NOT match plain `call expression_helper`', () => {
+			// Ensure `\b` boundary prevents matching labels that happen to
+			// start with `expression`.
+			expect('    call expression_helper'.match(callExpressionRegex)).toBeNull();
+		});
+
+		it('does NOT match `call my_label`', () => {
+			expect('    call my_label'.match(callExpressionRegex)).toBeNull();
+		});
+	});
 });
 
 describe('Call Screen Pattern Matching', () => {

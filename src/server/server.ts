@@ -3057,9 +3057,14 @@ async function validateDocument(textDocument: TextDocument): Promise<void> {
 			// The screen validation is handled separately below
 		}
 
+		// Also skip `call expression <expr>` / `jump expression <expr>` —
+		// the target is a Python expression evaluated at runtime, not a
+		// static label, so we can't validate it.
+		const callExpressionCheck = line.match(/^\s*(jump|call)\s+expression\b/);
+
 		// More specific regex to avoid matching inside strings or other contexts
 		// Use negative lookahead to exclude "call screen"
-		const jumpMatch = !callScreenCheck && line.match(/^\s*(jump|call)\s+(\.?[a-zA-Z_][a-zA-Z0-9_.]*)/);
+		const jumpMatch = !callScreenCheck && !callExpressionCheck && line.match(/^\s*(jump|call)\s+(\.?[a-zA-Z_][a-zA-Z0-9_.]*)/);
 		if (jumpMatch) {
 			const labelName = jumpMatch[2];
 
