@@ -1,4 +1,4 @@
-import { dottedSegmentAt, imageAttributesForTag, imageTags } from '../server/symbolLookup';
+import { dottedSegmentAt, imageAttributesForTag, imageTags, labelBodyRange, findEnclosingLabel } from '../server/symbolLookup';
 
 describe('dottedSegmentAt', () => {
 	it('returns null for non-dotted expressions', () => {
@@ -124,5 +124,98 @@ describe('imageTags', () => {
 		const names = ['cg ch01 a', 'bg ch01 b', 'cg ch02 c'];
 		// `cg` first because that's the first name we see, then `bg`.
 		expect(imageTags(names)).toEqual(['cg', 'bg']);
+	});
+});
+
+describe('labelBodyRange', () => {
+	it('returns the body of a top-level label', () => {
+		const lines = [
+			'label start:',        // 0
+			'    scene bg room',   // 1
+			'    "Hello"',         // 2
+			'    return',          // 3
+			'',                    // 4
+			'label chapter_two:',  // 5
+			'    "Next"',          // 6
+		];
+		const range = labelBodyRange(lines, 0);
+		expect(range).toEqual({ start: 1, end: 5 });
+	});
+
+	it('skips blank and comment-only lines when finding the end', () => {
+		const lines = [
+			'label start:',      // 0
+			'    "Hi"',          // 1
+			'',                  // 2 (blank)
+			'    # comment',     // 3 (comment)
+			'    "Bye"',         // 4
+			'label next:',       // 5
+			'    "Next"',        // 6
+		];
+		const range = labelBodyRange(lines, 0);
+		expect(range).toEqual({ start: 1, end: 5 });
+	});
+
+	it('runs to end of file when there is no following same-indent line', () => {
+		const lines = [
+			'label solo:',       // 0
+			'    "A"',           // 1
+			'    "B"',           // 2
+		];
+		const range = labelBodyRange(lines, 0);
+		expect(range).toEqual({ start: 1, end: 3 });
+	});
+});
+
+describe('findEnclosingLabel', () => {
+	it('finds the label at the given line', () => {
+		const lines = [
+			'label start:',      // 0
+			'    "Hi"',          // 1
+			'    jump next',     // 2
+		];
+		expect(findEnclosingLabel(lines, 2)).toEqual({ name: 'start', defLine: 0 });
+	});
+
+	it('returns null when no preceding label exists', () => {
+		const lines = [
+			'# just a comment',
+			'"floating text"',
+		];
+		expect(findEnclosingLabel(lines, 1)).toBeNull();
+	});
+
+	it('skips local labels (starting with .)', () => {
+		const lines = [
+			'label outer:',        // 0
+			'    "Body"',          // 1
+			'label .inner:',       // 2 - local, should be skipped
+			'    jump target',     // 3
+		];
+		expect(findEnclosingLabel(lines, 3)).toEqual({ name: 'outer', defLine: 0 });
+	});
+
+	it('picks the nearest preceding global label', () => {
+		const lines = [
+			'label first:',      // 0
+			'    "A"',           // 1
+			'label second:',     // 2
+			'    "B"',           // 3
+			'    jump third',    // 4
+		];
+		expect(findEnclosingLabel(lines, 4)).toEqual({ name: 'second', defLine: 2 });
+	});
+
+	it('returns the nearest local label when globalOnly is false', () => {
+		const lines = [
+			'label outer:',        // 0
+			'    "body"',          // 1
+			'label .inner:',       // 2 - local
+			'    jump target',     // 3
+		];
+		// Default (globalOnly=true) skips locals — the enclosing is `outer`.
+		expect(findEnclosingLabel(lines, 3)).toEqual({ name: 'outer', defLine: 0 });
+		// With globalOnly=false, the nearest is `.inner`.
+		expect(findEnclosingLabel(lines, 3, false)).toEqual({ name: '.inner', defLine: 2 });
 	});
 });

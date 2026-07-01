@@ -1,3 +1,41 @@
+// For a `label X:` at `defLine`, return the [start, end) range of line
+// indices that belong to the label body. The body ends at the next line
+// whose indentation is <= the label's own and that isn't blank/comment-only.
+export function labelBodyRange(lines: string[], defLine: number): { start: number; end: number } {
+	const defMatch = lines[defLine]?.match(/^(\s*)label\s+/);
+	const defIndent = defMatch ? defMatch[1].length : 0;
+	let end = lines.length;
+	for (let i = defLine + 1; i < lines.length; i++) {
+		const raw = lines[i];
+		const trimmed = raw.trim();
+		if (!trimmed || trimmed.startsWith('#')) continue;
+		const indentMatch = raw.match(/^(\s*)/);
+		const indent = indentMatch ? indentMatch[1].length : 0;
+		if (indent <= defIndent) {
+			end = i;
+			break;
+		}
+	}
+	return { start: defLine + 1, end };
+}
+
+// Find the nearest preceding label definition (`label X:`) walking
+// backward from `line`. Returns null if none is found. If
+// `globalOnly` is true, local labels (starting with `.`) are skipped.
+export function findEnclosingLabel(
+	lines: string[],
+	line: number,
+	globalOnly: boolean = true
+): { name: string; defLine: number } | null {
+	for (let i = Math.min(line, lines.length - 1); i >= 0; i--) {
+		const m = lines[i].match(/^(\s*)label\s+(\.?[a-zA-Z_][a-zA-Z0-9_.]*)/);
+		if (!m) continue;
+		if (globalOnly && m[2].startsWith('.')) continue;
+		return { name: m[2], defLine: i };
+	}
+	return null;
+}
+
 // Given a list of full image names (e.g. ["kelly_casual ch06 smile",
 // "eileen happy", "bg ch01 hallway"]) return the deduped set of image
 // tags (the first word of each name). Used for completion of the first

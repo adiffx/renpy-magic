@@ -34,11 +34,17 @@ import {
 	PrepareRenameParams,
 	FileChangeType,
 	DidChangeWatchedFilesParams,
+	CallHierarchyItem,
+	CallHierarchyPrepareParams,
+	CallHierarchyIncomingCall,
+	CallHierarchyIncomingCallsParams,
+	CallHierarchyOutgoingCall,
+	CallHierarchyOutgoingCallsParams,
 } from 'vscode-languageserver/node';
 
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { renpyDocs, getAllSymbols, getDoc, DocEntry, getEntriesByNamespace } from './renpyDocs';
-import { dottedSegmentAt, imageAttributesForTag, imageTags } from './symbolLookup';
+import { dottedSegmentAt, imageAttributesForTag, imageTags, labelBodyRange, findEnclosingLabel } from './symbolLookup';
 import { extractAssetPath, IMAGE_EXTENSIONS, AUDIO_EXTENSIONS } from './assetPath';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -225,6 +231,7 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
 			},
 			workspaceSymbolProvider: true,
 			referencesProvider: true,
+			callHierarchyProvider: true,
 			renameProvider: {
 				prepareProvider: true
 			},
@@ -2534,6 +2541,218 @@ function findReferencesInDirectory(dirPath: string, symbol: string, locations: L
 		}
 	} catch (e) {
 		// Ignore errors
+	}
+}
+
+function labelToCallHierarchyItem(name: string, uri: string, defLine: number, character: number): CallHierarchyItem {
+	return {
+		name,
+		kind: SymbolKind.Function,
+		uri,
+		range: Range.create(defLine, 0, defLine, name.length + 10),
+		selectionRange: Range.create(defLine, character, defLine, character + name.length),
+	};
+}
+
+// Find the line index of a local `.label` definition within the given
+// file lines. Returns null if not found. Local labels are unique per
+// file (per Ren'Py rules), so a linear scan suffices.
+function findLocalLabelLine(lines: string[], localName: string): number | null {
+	for (let i = 0; i < lines.length; i++) {
+		const m = lines[i].match(/^\s*label\s+(\.?[a-zA-Z_][a-zA-Z0-9_.]*)/);
+		if (m && m[1] === localName) return i;
+	}
+	return null;
+}
+
+// Prepare handler: return the label under the cursor as a CallHierarchyItem.
+connection.languages.callHierarchy.onPrepare((params: CallHierarchyPrepareParams): CallHierarchyItem[] => {
+	const document = documents.get(params.textDocument.uri);
+	if (!document) return [];
+
+	const text = document.getText();
+	const lines = text.split('\n');
+	const line = lines[params.position.line] || '';
+
+	// Case 1: cursor on a `label X:` line (global or local).
+	const labelDefMatch = line.match(/^(\s*)label\s+(\.?[a-zA-Z_][a-zA-Z0-9_.]*)/);
+	if (labelDefMatch) {
+		const name = labelDefMatch[2];
+		const character = (labelDefMatch[1] || '').length + 'label '.length;
+		return [labelToCallHierarchyItem(name, params.textDocument.uri, params.position.line, character)];
+	}
+
+	// Case 2: cursor on a `jump X` or `call X` — resolve to X's definition.
+	const word = getWordAtPosition(document, params.position);
+	if (word) {
+		const jumpCallOnLine = line.match(/\b(jump|call)\s+(\.?[a-zA-Z_][a-zA-Z0-9_.]*)/);
+		if (jumpCallOnLine && jumpCallOnLine[2] === word) {
+			if (word.startsWith('.')) {
+				// Local target: resolve within the same file.
+				const defLine = findLocalLabelLine(lines, word);
+				if (defLine !== null) {
+					return [labelToCallHierarchyItem(word, params.textDocument.uri, defLine, 'label '.length)];
+				}
+			} else {
+				const defs = symbolIndex.get(word);
+				if (defs) {
+					for (const def of defs) {
+						if (def.kind !== 'label' || def.name.startsWith('.')) continue;
+						return [labelToCallHierarchyItem(def.name, def.uri, def.line, def.character)];
+					}
+				}
+			}
+		}
+	}
+
+	return [];
+});
+
+// Outgoing calls: read the label's body and collect every `jump|call <target>`.
+connection.languages.callHierarchy.onOutgoingCalls((params: CallHierarchyOutgoingCallsParams): CallHierarchyOutgoingCall[] => {
+	const item = params.item;
+	let source: string;
+	try {
+		source = fs.readFileSync(URI.parse(item.uri).fsPath, 'utf-8');
+	} catch {
+		return [];
+	}
+	const lines = source.split('\n');
+	const { start, end } = labelBodyRange(lines, item.range.start.line);
+
+	// Group by target (key on uri+name to keep local labels from different
+	// files distinct — though in practice outgoing calls all stay in one file).
+	const byTarget = new Map<string, { def: CallHierarchyItem; fromRanges: Range[] }>();
+	for (let i = start; i < end; i++) {
+		const line = lines[i];
+		const m = line.match(/^\s*(jump|call)\s+(\.?[a-zA-Z_][a-zA-Z0-9_.]*)/);
+		if (!m) continue;
+		const target = m[2];
+		if (target === 'screen' || target === 'expression') continue;
+
+		let targetUri: string;
+		let targetLine: number;
+		let targetChar: number;
+		let targetName = target;
+
+		if (target.startsWith('.')) {
+			// Local target: resolve within the current file.
+			const defLine = findLocalLabelLine(lines, target);
+			if (defLine === null) continue;
+			targetUri = item.uri;
+			targetLine = defLine;
+			targetChar = 'label '.length;
+		} else {
+			const defs = symbolIndex.get(target);
+			if (!defs) continue;
+			const labelDef = defs.find(d => d.kind === 'label' && !d.name.startsWith('.'));
+			if (!labelDef) continue;
+			targetUri = labelDef.uri;
+			targetLine = labelDef.line;
+			targetChar = labelDef.character;
+			targetName = labelDef.name;
+		}
+
+		const nameStart = line.indexOf(target, m.index);
+		const fromRange = Range.create(i, nameStart, i, nameStart + target.length);
+		const key = `${targetUri}#${targetName}`;
+		const existing = byTarget.get(key);
+		if (existing) {
+			existing.fromRanges.push(fromRange);
+		} else {
+			byTarget.set(key, {
+				def: labelToCallHierarchyItem(targetName, targetUri, targetLine, targetChar),
+				fromRanges: [fromRange],
+			});
+		}
+	}
+
+	return Array.from(byTarget.values()).map(({ def, fromRanges }) => ({
+		to: def,
+		fromRanges,
+	}));
+});
+
+// Incoming calls. For global labels, search all indexed .rpy files.
+// For local labels, restrict the search to the label's own file since
+// `.local` names are only addressable within their file/parent scope.
+connection.languages.callHierarchy.onIncomingCalls((params: CallHierarchyIncomingCallsParams): CallHierarchyIncomingCall[] => {
+	const targetName = params.item.name;
+	const byCaller = new Map<string, { def: CallHierarchyItem; fromRanges: Range[] }>();
+
+	if (targetName.startsWith('.')) {
+		const filePath = URI.parse(params.item.uri).fsPath;
+		collectIncomingCallsInFile(filePath, targetName, byCaller);
+	} else {
+		for (const folder of workspaceFolders) {
+			const folderPath = URI.parse(folder.uri).fsPath;
+			collectIncomingCallsInDir(folderPath, targetName, byCaller);
+		}
+	}
+
+	return Array.from(byCaller.values()).map(({ def, fromRanges }) => ({
+		from: def,
+		fromRanges,
+	}));
+});
+
+function collectIncomingCallsInDir(
+	dirPath: string,
+	targetName: string,
+	byCaller: Map<string, { def: CallHierarchyItem; fromRanges: Range[] }>
+) {
+	try {
+		const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+		for (const entry of entries) {
+			const fullPath = path.join(dirPath, entry.name);
+			if (entry.isDirectory() && !entry.name.startsWith('.')) {
+				collectIncomingCallsInDir(fullPath, targetName, byCaller);
+			} else if (entry.isFile() && (entry.name.endsWith('.rpy') || entry.name.endsWith('.rpym'))) {
+				collectIncomingCallsInFile(fullPath, targetName, byCaller);
+			}
+		}
+	} catch {
+		// ignore
+	}
+}
+
+function collectIncomingCallsInFile(
+	filePath: string,
+	targetName: string,
+	byCaller: Map<string, { def: CallHierarchyItem; fromRanges: Range[] }>
+) {
+	let content: string;
+	try {
+		content = fs.readFileSync(filePath, 'utf-8');
+	} catch {
+		return;
+	}
+	const uri = URI.file(filePath).toString();
+	const lines = content.split('\n');
+	const escapedTarget = targetName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+	const jumpCallRegex = new RegExp(`^\\s*(jump|call)\\s+(${escapedTarget})\\b`);
+
+	for (let i = 0; i < lines.length; i++) {
+		const line = lines[i];
+		const m = line.match(jumpCallRegex);
+		if (!m) continue;
+		// Include local labels as potential callers — in local-scoped
+		// files the immediate parent of a `jump .foo` is often another
+		// local label sibling.
+		const enclosing = findEnclosingLabel(lines, i, false);
+		if (!enclosing) continue;
+		const nameStart = line.indexOf(targetName, m.index);
+		const fromRange = Range.create(i, nameStart, i, nameStart + targetName.length);
+		const key = `${uri}#${enclosing.name}`;
+		const existing = byCaller.get(key);
+		if (existing) {
+			existing.fromRanges.push(fromRange);
+		} else {
+			byCaller.set(key, {
+				def: labelToCallHierarchyItem(enclosing.name, uri, enclosing.defLine, 6),
+				fromRanges: [fromRange],
+			});
+		}
 	}
 }
 
