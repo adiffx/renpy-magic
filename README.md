@@ -102,6 +102,14 @@ Navigate directly to definitions of:
 
 ✔ Handles Ren’Py’s flexible image naming (space-separated names)
 
+#### Label Graph
+
+Visualize the control flow of the current file — a click-to-navigate graph of every label plus the `jump`, menu-choice, and implicit fall-through edges connecting them. Useful for eyeballing chapter structure, spotting unreachable labels, and remembering which choices lead where.
+
+Run **Ren'Py: Show Label Graph** from the command palette (or right-click a `.rpy` file). The graph opens in a side tab; drag it to a new window to give it more room.
+
+<img src="./images/screenshots/LabelGraph.png" width="1150" />
+
 ### 🔁 Refactoring Tools
 
 #### Find All References (`Shift+F12`)

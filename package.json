@@ -41,6 +41,13 @@
   ],
   "main": "./out/extension.js",
   "contributes": {
+    "commands": [
+      {
+        "command": "renpy.showLabelGraph",
+        "title": "Ren'Py: Show Label Graph (current file)",
+        "category": "Ren'Py"
+      }
+    ],
     "languages": [
       {
         "id": "renpy",
@@ -90,7 +97,8 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./ && cp src/server/renpy-api.json out/server/",
+    "compile": "tsc -p ./ && cp src/server/renpy-api.json out/server/ && npm run copy-vendor",
+    "copy-vendor": "mkdir -p out/vendor && cp node_modules/cytoscape/dist/cytoscape.min.js out/vendor/cytoscape.min.js && cp node_modules/dagre/dist/dagre.min.js out/vendor/dagre.min.js && cp node_modules/cytoscape-dagre/cytoscape-dagre.js out/vendor/cytoscape-dagre.js",
     "watch": "tsc -watch -p ./",
     "test": "jest",
     "fetch-api": "npx ts-node scripts/fetch-renpy-docs.ts",
@@ -98,6 +106,9 @@
     "publish": "vsce publish"
   },
   "dependencies": {
+    "cytoscape": "^3.30.2",
+    "cytoscape-dagre": "^2.5.0",
+    "dagre": "^0.8.5",
     "image-size": "^2.0.2",
     "vscode-languageclient": "^9.0.1",
     "vscode-languageserver": "^9.0.1",
