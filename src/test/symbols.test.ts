@@ -481,6 +481,40 @@ describe('Symbol Reference Patterns', () => {
 			expect('define config.name = "My Game"'.match(audioDefRegex)).toBeNull();
 			expect('define gui.text_color = "#fff"'.match(audioDefRegex)).toBeNull();
 		});
+
+		describe('Audio Name Completion', () => {
+			// Regex from the completion handler: detects when the cursor is
+			// positioned to receive an audio name suggestion.
+			const audioNameRegex = /\b(play|queue|stop)\s+(music|sound|voice|audio)\s+([a-zA-Z_]\w*)?$/;
+
+			it('fires after `play music ` with no partial', () => {
+				const m = '    play music '.match(audioNameRegex);
+				expect(m).not.toBeNull();
+				expect(m![3]).toBeUndefined();
+			});
+
+			it('fires with a partial name', () => {
+				const m = '    play music playful'.match(audioNameRegex);
+				expect(m).not.toBeNull();
+				expect(m![3]).toBe('playful');
+			});
+
+			it('fires for stop and queue too', () => {
+				expect('    stop music '.match(audioNameRegex)).not.toBeNull();
+				expect('    queue music theme'.match(audioNameRegex)).not.toBeNull();
+			});
+
+			it('fires for sound / voice / audio channels', () => {
+				expect('    play sound '.match(audioNameRegex)).not.toBeNull();
+				expect('    play voice '.match(audioNameRegex)).not.toBeNull();
+				expect('    play audio '.match(audioNameRegex)).not.toBeNull();
+			});
+
+			it('does not fire on unrelated lines', () => {
+				expect('    show music_room '.match(audioNameRegex)).toBeNull();
+				expect('    label play_music:'.match(audioNameRegex)).toBeNull();
+			});
+		});
 	});
 
 	describe('Show Line Clause Detection', () => {

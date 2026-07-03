@@ -1769,10 +1769,12 @@ connection.onCompletion((params): CompletionItem[] => {
 	// - `jump|call ` for label completion
 	// - `show|scene|hide ` (and any number of further tokens) for image
 	//   tag/attribute/clause-keyword completion
+	// - `play|queue|stop music|sound|voice|audio ` for audio name completion
 	if (params.context?.triggerCharacter === ' ') {
 		const isJumpCall = lineContext.match(/\b(jump|call)\s+$/);
 		const isShowContext = lineContext.match(/\b(show|scene|hide)\s+(?:[a-zA-Z_][a-zA-Z0-9_]*\s+)*$/);
-		if (!isJumpCall && !isShowContext) {
+		const isAudioContext = lineContext.match(/\b(play|queue|stop)\s+(music|sound|voice|audio)\s+$/);
+		if (!isJumpCall && !isShowContext && !isAudioContext) {
 			return [];
 		}
 	}
@@ -2014,6 +2016,27 @@ connection.onCompletion((params): CompletionItem[] => {
 				data: 6000 + index
 			});
 		});
+	}
+
+	// After `play|queue|stop <channel> ` (music/sound/voice/audio),
+	// suggest audio names defined as `define audio.<name> = "..."`.
+	const audioNameMatch = lineContext.match(/\b(play|queue|stop)\s+(music|sound|voice|audio)\s+([a-zA-Z_]\w*)?$/);
+	if (audioNameMatch) {
+		const audioItems: CompletionItem[] = [];
+		let index = 0;
+		for (const [name, defs] of symbolIndex) {
+			if (!name.startsWith('audio.')) continue;
+			if (!defs.some(d => d.kind === 'define')) continue;
+			const shortName = name.substring('audio.'.length);
+			audioItems.push({
+				label: shortName,
+				kind: CompletionItemKind.Value,
+				detail: 'audio',
+				sortText: '0' + shortName,
+				data: 18000 + index++,
+			});
+		}
+		if (audioItems.length > 0) return audioItems;
 	}
 
 	// After `show|scene|hide ` (first token), suggest image tags from the
