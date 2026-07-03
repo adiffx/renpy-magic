@@ -243,6 +243,10 @@ function renderLabelGraphHtml(
     <input type="checkbox" id="show-fallthroughs" checked />
     Show fallthroughs
   </label>
+  <label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
+    <input type="checkbox" id="show-calls" checked />
+    Show calls
+  </label>
   <button id="flip" title="Toggle horizontal / vertical layout">Flip</button>
   <button id="fit">Fit</button>
 </div>
@@ -256,13 +260,14 @@ function renderLabelGraphHtml(
   let graph = ${data};
 
   const buildElements = (g) => {
-    // Orphan detection ignores fallthrough edges — a label connected
-    // only by implicit textual flow is still "structure-only" from a
-    // branching perspective.
+    // Orphan detection considers only branching edges (jumps). Labels
+    // connected only by implicit textual flow (fallthrough) or by
+    // function-call semantics (call) are still "structure-only" from
+    // a branching perspective.
     const hasIncoming = new Set();
     const hasOutgoing = new Set();
     for (const e of g.edges) {
-      if (e.kind === 'fallthrough') continue;
+      if (e.kind !== 'jump') continue;
       hasIncoming.add(e.target);
       hasOutgoing.add(e.source);
     }
@@ -368,6 +373,15 @@ function renderLabelGraphHtml(
         },
       },
       {
+        selector: 'edge[kind = "call"]',
+        style: {
+          'line-style': 'dotted',
+          'line-color': '#c48a3a',
+          'target-arrow-color': '#c48a3a',
+          'width': 1.5,
+        },
+      },
+      {
         selector: 'edge.hidden',
         style: { 'display': 'none' },
       },
@@ -419,16 +433,19 @@ function renderLabelGraphHtml(
   };
   applyOrphanVisibility(false);
 
-  const applyFallthroughVisibility = (show) => {
+  const applyEdgeKindVisibility = (kind, show) => {
     cy.batch(() => {
       cy.edges().forEach((e) => {
-        if (e.data('kind') === 'fallthrough') {
+        if (e.data('kind') === kind) {
           e.toggleClass('hidden', !show);
         }
       });
     });
   };
+  const applyFallthroughVisibility = (show) => applyEdgeKindVisibility('fallthrough', show);
+  const applyCallVisibility = (show) => applyEdgeKindVisibility('call', show);
   applyFallthroughVisibility(true);
+  applyCallVisibility(true);
 
   const clearFocus = () => {
     cy.batch(() => cy.elements().removeClass('faded'));
@@ -477,6 +494,10 @@ function renderLabelGraphHtml(
   });
   document.getElementById('show-fallthroughs').addEventListener('change', (e) => {
     applyFallthroughVisibility(e.target.checked);
+    relayout(currentDir);
+  });
+  document.getElementById('show-calls').addEventListener('change', (e) => {
+    applyCallVisibility(e.target.checked);
     relayout(currentDir);
   });
 
@@ -539,12 +560,14 @@ function renderLabelGraphHtml(
       graph = msg.graph;
       const showOrphans = document.getElementById('show-orphans').checked;
       const showFallthroughs = document.getElementById('show-fallthroughs').checked;
+      const showCalls = document.getElementById('show-calls').checked;
       cy.batch(() => {
         cy.elements().remove();
         cy.add(buildElements(graph));
       });
       applyOrphanVisibility(showOrphans);
       applyFallthroughVisibility(showFallthroughs);
+      applyCallVisibility(showCalls);
       // Preserve currentDir but re-run the layout so new nodes land in position.
       cy.layout({ name: 'dagre', rankDir: currentDir, nodeSep: 40, rankSep: 60 }).run();
       document.getElementById('meta').textContent = graph.nodes.length + ' nodes · ' + graph.edges.length + ' edges';

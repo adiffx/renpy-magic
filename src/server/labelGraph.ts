@@ -71,17 +71,16 @@ export function buildFileGraph(fileUri: string, labels: LabelMapEntry[]): Graph 
 		}
 	}
 
-	// Second pass: create edges. Surface `jump` and `fallthrough` — the
-	// former is explicit branching, the latter is Ren'Py's implicit
-	// "next label" flow when a label body doesn't end with a
-	// terminator. `call` is skipped (function-call semantics, not
-	// branching). Targets outside the current file become "external"
-	// placeholder nodes so the graph stays self-contained.
+	// Second pass: create edges. Surface all three kinds — `jump`
+	// (explicit branching), `fallthrough` (Ren'Py's implicit "next
+	// label" flow when a label body doesn't end with a terminator), and
+	// `call` (function-call semantics, returns to the caller). Targets
+	// outside the current file become "external" placeholder nodes so
+	// the graph stays self-contained.
 	const externalIds = new Map<string, string>();
 	for (const label of labels) {
 		const sourceId = nodeIdFor(label);
 		for (const edge of label.outgoing) {
-			if (edge.kind !== 'jump' && edge.kind !== 'fallthrough') continue;
 			let targetId: string;
 			if (edge.target.startsWith('.')) {
 				const existing = localIds.get(edge.target);

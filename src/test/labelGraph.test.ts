@@ -17,7 +17,7 @@ describe('buildFileGraph', () => {
 		expect(g.nodes.every(n => n.kind === 'global')).toBe(true);
 	});
 
-	it('links jump edges to their targets and ignores call edges', () => {
+	it('surfaces jump, call, and fallthrough edges', () => {
 		const labels = extractLabelsFromText([
 			'label a:',
 			'    call b',
@@ -28,10 +28,13 @@ describe('buildFileGraph', () => {
 			'    return',
 		].join('\n'));
 		const g = buildFileGraph(FILE_URI, labels);
-		expect(g.edges).toHaveLength(1);
 		const a = g.nodes.find(n => n.label === 'a')!;
+		const b = g.nodes.find(n => n.label === 'b')!;
 		const c = g.nodes.find(n => n.label === 'c')!;
-		expect(g.edges[0]).toMatchObject({ source: a.id, target: c.id, kind: 'jump' });
+		const jumps = g.edges.filter(e => e.kind === 'jump');
+		const calls = g.edges.filter(e => e.kind === 'call');
+		expect(jumps).toContainEqual(expect.objectContaining({ source: a.id, target: c.id }));
+		expect(calls).toContainEqual(expect.objectContaining({ source: a.id, target: b.id }));
 	});
 
 	it('attributes local labels to the preceding global as their parent', () => {
@@ -74,13 +77,16 @@ describe('buildFileGraph', () => {
 		expect(g.edges).toHaveLength(2);
 	});
 
-	it('does not create an external node when the only reference is a call', () => {
+	it('creates an external node for a call target that lives elsewhere', () => {
 		const labels = extractLabelsFromText([
 			'label start:',
 			'    call helper',
+			'    return',
 		].join('\n'));
 		const g = buildFileGraph(FILE_URI, labels);
-		expect(g.edges).toHaveLength(0);
-		expect(g.nodes.filter(n => n.kind === 'external')).toHaveLength(0);
+		const external = g.nodes.find(n => n.kind === 'external');
+		expect(external).toBeDefined();
+		expect(external!.label).toBe('helper');
+		expect(g.edges.some(e => e.kind === 'call' && e.target === external!.id)).toBe(true);
 	});
 });
