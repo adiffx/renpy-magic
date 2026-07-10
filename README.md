@@ -110,6 +110,10 @@ Run **Ren'Py: Show Label Graph** from the command palette (or right-click a `.rp
 
 <img src="./images/screenshots/LabelGraph.png" width="1150" />
 
+#### Call Hierarchy (`Shift+Alt+H`)
+
+Put the cursor on a `label` definition — or on a `jump`/`call` reference — and open the Call Hierarchy view. See at a glance who calls into that label from anywhere in the workspace, and where it jumps or calls out to. Works for local labels too, scoped to their file.
+
 ### 🔁 Refactoring Tools
 
 #### Find All References (`Shift+F12`)
@@ -138,6 +142,8 @@ Context-aware suggestions for:
 * Transitions (after `with`)
 * Labels and screens in relevant contexts
 * Built-in Ren’Py API
+* Image tags and attributes on `show`/`scene`/`hide` (e.g. after `show kelly_casual `, you get `smile`, `teasing`, etc.), plus clause arguments (`at <transform>`, `behind <tag>`, `onlayer <layer>`)
+* Audio names defined via `define audio.<name>` after `play`/`queue`/`stop music|sound|voice|audio`
 
 ### ✍️ Signature Help
 

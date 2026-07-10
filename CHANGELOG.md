@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.1.4] - 2026-07-10
+
+### Added
+- Label Graph webview — "Ren'Py: Show Label Graph" opens an interactive Cytoscape graph of the current file's control flow (labels, `jump` and `call` edges, menu-choice branches, and Ren'Py's implicit fall-through). Click nodes to jump, hover for a body preview; live-refreshes as you edit
+- Call Hierarchy support for labels (Shift+Alt+H) — surfaces incoming and outgoing `jump`/`call` edges across the workspace; local labels are handled within their file
+- Completion suggestions for image tags on `show|scene|hide` (e.g. `show ` now suggests `bg`, `cg`, `kelly_casual`, etc.)
+- Completion suggestions for clause arguments on `show|scene|hide` lines (`at <transform>`, `behind <tag>`, `onlayer <layer>`) and clause keywords once at least one attribute is present
+- Completion suggestions for audio names after `play|queue|stop music|sound|voice|audio ` (offers every `define audio.<name>` from the workspace)
+
+### Fixed
+- `call expression <python-expr>` and `jump expression <python-expr>` no longer produce a false "undefined label" warning (`expression` is a keyword on those forms, not a label)
+
 ## [1.1.3] - 2026-05-04
 
 ### Added
